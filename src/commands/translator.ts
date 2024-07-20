@@ -1,18 +1,36 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { languages } from '../lib/languages';
-import { translateText } from '../lib/translator';
+import { languages } from '../utils/languages';
+import { translateText } from '../utils/translator';
 
-export const setTranslationLanguage = (bot: TelegramBot, chatId: number, userLanguageMap: Map<number, { code: string, name: string, flag: string }>) => {
-    bot.sendMessage(chatId, 'Iltimos, qaysi tilga tarjima qilishni xohlaysiz?', createLanguageOptions());
+const userMessageMap = new Map<number, number[]>();
+
+const addMessageToContext = (chatId: number, messageId: number) => {
+    const messages = userMessageMap.get(chatId) || [];
+    messages.push(messageId);
+    userMessageMap.set(chatId, messages);
 };
 
-export const handleTranslationCommand = (bot: TelegramBot, message: TelegramBot.Message, data: string, userLanguageMap: Map<number, { code: string, name: string, flag: string }>) => {
+export const setTranslationLanguage = async (bot: TelegramBot, chatId: number, userLanguageMap: Map<number, { code: string, name: string, flag: string }>) => {
+    const sentMessage = await bot.sendMessage(chatId, 'Iltimos, qaysi tilga tarjima qilishni xohlaysiz?', createLanguageOptions());
+    addMessageToContext(chatId, sentMessage.message_id);
+};
+
+export const handleTranslationCommand = async (bot: TelegramBot, message: TelegramBot.Message, data: string, userLanguageMap: Map<number, { code: string, name: string, flag: string }>) => {
     const chatId = message.chat.id;
     const langCode = data.split('_')[1];
     const language = languages.find(lang => lang.code === langCode);
     if (language) {
         userLanguageMap.set(chatId, language);
-        bot.sendMessage(chatId, `Tarjima tili ${language.flag} ${language.name} qilib o'rnatildi. Endi matnni kiriting.`);
+        const sentMessage = await bot.sendMessage(chatId, `Tarjima tili ${language.flag} ${language.name} qilib o'rnatildi. Endi matnni kiriting.`, {
+            reply_markup: {
+                keyboard: [
+                    [{ text: "Bot turini o'zgartirish" }]
+                ],
+                resize_keyboard: true,
+                one_time_keyboard: false
+            }
+        });
+        addMessageToContext(chatId, sentMessage.message_id);
     }
 };
 
@@ -27,14 +45,31 @@ export const handleTextMessage = async (bot: TelegramBot, msg: TelegramBot.Messa
             try {
                 bot.sendChatAction(chatId, 'typing');
                 const translatedText = await translateText(text, targetLanguage.code);
-                bot.sendMessage(chatId, `${translatedText}`, {
-                    reply_to_message_id: msg.message_id
+                const sentMessage = await bot.sendMessage(chatId, `Tarjima: ${translatedText}`, {
+                    reply_markup: {
+                        keyboard: [
+                            [{ text: "Bot turini o'zgartirish" }]
+                        ],
+                        resize_keyboard: true,
+                        one_time_keyboard: false
+                    }
                 });
+                addMessageToContext(chatId, sentMessage.message_id);
             } catch (error) {
-                bot.sendMessage(chatId, error.message);
+                const sentMessage = await bot.sendMessage(chatId, error.message, {
+                    reply_markup: {
+                        keyboard: [
+                            [{ text: "Bot turini o'zgartirish" }]
+                        ],
+                        resize_keyboard: true,
+                        one_time_keyboard: false
+                    }
+                });
+                addMessageToContext(chatId, sentMessage.message_id);
             }
         } else {
-            bot.sendMessage(chatId, 'Iltimos, avval tarjima tilini tanlang.', createLanguageOptions());
+            const sentMessage = await bot.sendMessage(chatId, 'Iltimos, avval tarjima tilini tanlang.', createLanguageOptions());
+            addMessageToContext(chatId, sentMessage.message_id);
         }
     }
 };
