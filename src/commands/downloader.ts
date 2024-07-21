@@ -10,8 +10,25 @@ const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 const FILE_SIZE_LIMIT_MB = 50;  // Telegram file size limit
 const MAX_RETRIES = 3;  // Retry limit
 
-export const handleDownloadCommand = (bot: TelegramBot, chatId: number) => {
-    bot.sendMessage(chatId, 'Please send the URL of the video or image you want to download.');
+const userMessageMap = new Map<number, number[]>();
+
+const addMessageToContext = (chatId: number, messageId: number) => {
+    const messages = userMessageMap.get(chatId) || [];
+    messages.push(messageId);
+    userMessageMap.set(chatId, messages);
+};
+
+export const handleDownloadCommand = async (bot: TelegramBot, chatId: number) => {
+    const sentMessage = await bot.sendMessage(chatId, 'Please send the URL of the video or image you want to download.', {
+        reply_markup: {
+            keyboard: [
+                [{ text: "Bot turini o'zgartirish" }]
+            ],
+            resize_keyboard: true,
+            one_time_keyboard: false
+        }
+    });
+    addMessageToContext(chatId, sentMessage.message_id);
 };
 
 const downloadVideo = async (url: string, output: string): Promise<void> => {
@@ -69,7 +86,16 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
     const url = msg.text;
 
     if (url && url.startsWith("http")) {
-        const processingMessage = await bot.sendMessage(chatId, 'Processing the URL, please wait...');
+        const processingMessage = await bot.sendMessage(chatId, 'Processing the URL, please wait...', {
+            reply_markup: {
+                keyboard: [
+                    [{ text: "Bot turini o'zgartirish" }]
+                ],
+                resize_keyboard: true,
+                one_time_keyboard: false
+            }
+        });
+        addMessageToContext(chatId, processingMessage.message_id);
 
         try {
             let downloadUrl: string | null = null;
@@ -132,8 +158,15 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
                     throw new Error('Invalid API response');
                 }
             } else if (url.match(/\.(jpeg|jpg|gif|png)$/) != null) {
-                await bot.deleteMessage(chatId, processingMessage.message_id);
-                await bot.sendPhoto(chatId, url);
+                await bot.sendPhoto(chatId, url, {
+                    reply_markup: {
+                        keyboard: [
+                            [{ text: "Bot turini o'zgartirish" }]
+                        ],
+                        resize_keyboard: true,
+                        one_time_keyboard: false
+                    }
+                });
                 return;
             } else {
                 throw new Error('Invalid URL. Please enter a correct URL.');
@@ -169,12 +202,27 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
 
                         const fileSizeMB = getFileSizeInMB(output);
                         if (fileSizeMB > FILE_SIZE_LIMIT_MB) {
-                            await bot.deleteMessage(chatId, processingMessage.message_id);
-                            await bot.sendMessage(chatId, `The video size is larger than ${FILE_SIZE_LIMIT_MB} MB. Please upload another video.`);
+                            await bot.sendMessage(chatId, `The video size is larger than ${FILE_SIZE_LIMIT_MB} MB. Please upload another video.`, {
+                                reply_markup: {
+                                    keyboard: [
+                                        [{ text: "Bot turini o'zgartirish" }]
+                                    ],
+                                    resize_keyboard: true,
+                                    one_time_keyboard: false
+                                }
+                            });
                         } else {
                             await bot.sendChatAction(chatId, 'upload_video');
-                            await bot.deleteMessage(chatId, processingMessage.message_id);
-                            await bot.sendVideo(chatId, output, { caption: `Video uploaded. @tg_multitask_bot` });
+                            await bot.sendVideo(chatId, output, {
+                                caption: `Video uploaded. @tg_multitask_bot`,
+                                reply_markup: {
+                                    keyboard: [
+                                        [{ text: "Bot turini o'zgartirish" }]
+                                    ],
+                                    resize_keyboard: true,
+                                    one_time_keyboard: false
+                                }
+                            });
                         }
 
                         fs.unlinkSync(output);  // Delete the file from the server
@@ -185,25 +233,58 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
 
                         const fileSizeMB = getFileSizeInMB(output);
                         if (fileSizeMB > FILE_SIZE_LIMIT_MB) {
-                            await bot.deleteMessage(chatId, processingMessage.message_id);
-                            await bot.sendMessage(chatId, `The audio size is larger than ${FILE_SIZE_LIMIT_MB} MB. Please upload another audio.`);
+                            await bot.sendMessage(chatId, `The audio size is larger than ${FILE_SIZE_LIMIT_MB} MB. Please upload another audio.`, {
+                                reply_markup: {
+                                    keyboard: [
+                                        [{ text: "Bot turini o'zgartirish" }]
+                                    ],
+                                    resize_keyboard: true,
+                                    one_time_keyboard: false
+                                }
+                            });
                         } else {
                             await bot.sendChatAction(chatId, 'upload_audio');
-                            await bot.deleteMessage(chatId, processingMessage.message_id);
-                            await bot.sendAudio(chatId, output, { caption: `Audio uploaded. @tg_multitask_bot` });
+                            await bot.sendAudio(chatId, output, {
+                                caption: `Audio uploaded. @tg_multitask_bot`,
+                                reply_markup: {
+                                    keyboard: [
+                                        [{ text: "Bot turini o'zgartirish" }]
+                                    ],
+                                    resize_keyboard: true,
+                                    one_time_keyboard: false
+                                }
+                            });
                         }
 
                         fs.unlinkSync(output);  // Delete the file from the server
                     }
+
+                    await bot.deleteMessage(chatId, processingMessage.message_id.toString());
                 });
             }
         } catch (error) {
-            await bot.deleteMessage(chatId, processingMessage.message_id);
-            bot.sendMessage(chatId, `Error downloading the video: ${error.message}. Please try again.`);
+            bot.sendMessage(chatId, `Error downloading the video: ${error.message}. Please try again.`, {
+                reply_markup: {
+                    keyboard: [
+                        [{ text: "Bot turini o'zgartirish" }]
+                    ],
+                    resize_keyboard: true,
+                    one_time_keyboard: false
+                }
+            });
+            await bot.deleteMessage(chatId, processingMessage.message_id.toString());
             console.error('Error during video download:', error);
         }
     } else {
-        bot.sendMessage(chatId, 'Invalid URL. Please enter a correct YouTube or Instagram URL.');
+        bot.sendMessage(chatId, 'Invalid URL. Please enter a correct YouTube or Instagram URL.', {
+            reply_markup: {
+                keyboard: [
+                    [{ text: "Bot turini o'zgartirish" }]
+                ],
+                resize_keyboard: true,
+                one_time_keyboard: false
+            }
+        });
     }
 };
 
