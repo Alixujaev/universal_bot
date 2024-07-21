@@ -2,23 +2,13 @@ import TelegramBot from 'node-telegram-bot-api';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
-import { google } from 'googleapis';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
 
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 const FILE_SIZE_LIMIT_MB = 50;  // Telegram fayl hajmi cheklovi
-const KEYFILEPATH = 'C:/Users/user/Desktop/my/universal/universal-bot-430012-3fa36617a0e3.json';  // To'liq yo'lni kiriting
-const SCOPES = ['https://www.googleapis.com/auth/drive.file'];
-
-// Google Drive API xizmatini sozlash
-const auth = new google.auth.GoogleAuth({
-    keyFile: KEYFILEPATH,
-    scopes: SCOPES
-});
-
-const drive = google.drive({ version: 'v3', auth });
+const MAX_RETRIES = 3;  // Retry limit
 
 export const handleDownloadCommand = (bot: TelegramBot, chatId: number) => {
     bot.sendMessage(chatId, 'Iltimos, yuklab olmoqchi bo\'lgan video yoki rasmning URL manzilini yuboring.');
@@ -44,76 +34,90 @@ const getVideoSizeInMB = (filePath: string): number => {
     return fileSizeInBytes / (1024 * 1024);  // Convert to MB
 };
 
-const uploadFileToGoogleDrive = async (filePath: string): Promise<string> => {
-    const fileName = path.basename(filePath);
-    const fileMetadata = {
-        name: fileName
-    };
-    const media = {
-        mimeType: 'video/mp4', // Fayl turini o'zgartiring
-        body: fs.createReadStream(filePath)
-    };
-
-    const response = await drive.files.create({
-        requestBody: fileMetadata,
-        media: media,
-        fields: 'id'
-    });
-
-    const fileId = response.data.id;
-    return fileId;
-};
-
-const getFilePublicLink = async (fileId: string): Promise<string> => {
-    await drive.permissions.create({
-        fileId: fileId,
-        requestBody: {
-            role: 'reader',
-            type: 'anyone'
+const fetchFromApi = async (url: string, apiUrl: string, host: string, retries: number = MAX_RETRIES): Promise<any> => {
+    for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+            return await axios.get(apiUrl, {
+                params: { url: url },
+                headers: {
+                    'X-RapidAPI-Key': RAPIDAPI_KEY,
+                    'X-RapidAPI-Host': host
+                }
+            });
+        } catch (error) {
+            if (attempt < retries - 1 && (error.code === 'ECONNABORTED' || error.response?.status === 504)) {
+                console.warn(`Retrying request to ${apiUrl} (${attempt + 1}/${retries})...`);
+                continue;
+            }
+            throw error;
         }
-    });
-
-    const result = await drive.files.get({
-        fileId: fileId,
-        fields: 'webViewLink'
-    });
-
-    return result.data.webViewLink;
+    }
 };
 
 export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message) => {
     const chatId = msg.chat.id;
     const url = msg.text;
 
-    if (url && url.startsWith("http") && (url.includes("youtube.com") || url.includes("youtu.be"))) {
+    if (url && url.startsWith("http")) {
         bot.sendMessage(chatId, 'Videoni yuklab olmoqda, biroz kuting...');
 
         try {
-            const videoId = extractVideoId(url);
-            console.log('videoId:', videoId);
-            if (!videoId) {
-                throw new Error('Yaroqsiz YouTube URL. Iltimos, to\'g\'ri URL kiriting.');
-            }
+            let downloadUrl: string | null = null;
+            let title: string | null = null;
 
-            const apiResponse = await axios.get('https://yt-api.p.rapidapi.com/dl', {
-                params: { id: videoId },
-                headers: {
-                    'X-RapidAPI-Key': RAPIDAPI_KEY,
-                    'X-RapidAPI-Host': 'yt-api.p.rapidapi.com'
+            if (url.includes("youtube.com") || url.includes("youtu.be")) {
+                const videoId = extractVideoId(url);
+                console.log('videoId:', videoId);
+                if (!videoId) {
+                    throw new Error('Yaroqsiz YouTube URL. Iltimos, to\'g\'ri URL kiriting.');
                 }
-            });
 
-            console.log('API Response:', apiResponse.data);  // Javobni konsolga chiqarish
+                const apiResponse = await fetchFromApi(url, 'https://yt-api.p.rapidapi.com/dl', 'yt-api.p.rapidapi.com');
 
-            if (apiResponse.data.status === 'fail') {
-                throw new Error(apiResponse.data.error);
-            }
+                console.log('API Response:', apiResponse.data);  // Javobni konsolga chiqarish
 
-            const downloadUrl = apiResponse.data.downloadUrl || apiResponse.data.formats?.[0]?.url;
-            const title = apiResponse.data.title;
+                if (apiResponse.data.status === 'fail') {
+                    throw new Error(apiResponse.data.error);
+                }
 
-            if (!downloadUrl || !title) {
-                throw new Error('Invalid API response');
+                downloadUrl = apiResponse.data.downloadUrl || apiResponse.data.formats?.[0]?.url;
+                title = apiResponse.data.title;
+
+                if (!downloadUrl || !title) {
+                    throw new Error('Invalid API response');
+                }
+            } else if (url.includes("instagram.com")) {
+                const isStory = url.includes("/stories/");
+                let apiResponse;
+
+                try {
+                    apiResponse = await fetchFromApi(url, 'https://instagram-downloader.p.rapidapi.com/index', 'instagram-downloader.p.rapidapi.com');
+                } catch (error) {
+                    console.error('Primary API failed:', error);
+                    apiResponse = await fetchFromApi(url, 'https://instagram-downloader-download-photo-video-reels-igtv.p.rapidapi.com/data', 'instagram-downloader-download-photo-video-reels-igtv.p.rapidapi.com');
+                }
+
+                console.log('API Response:', apiResponse.data);  // Javobni konsolga chiqarish
+
+                if (isStory) {
+                    if (!apiResponse.data.result || !apiResponse.data.result.video_url) {
+                        throw new Error('Invalid API response');
+                    }
+                    downloadUrl = apiResponse.data.result.video_url;
+                    title = apiResponse.data.result.username || 'instagram_story';
+                } else {
+                    if (!apiResponse.data.result || !apiResponse.data.result.video_url) {
+                        throw new Error('Invalid API response');
+                    }
+                    downloadUrl = apiResponse.data.result.video_url;
+                    title = apiResponse.data.result.username || 'instagram_video';
+                }
+
+                if (!downloadUrl || !title) {
+                    throw new Error('Invalid API response');
+                }
+            } else {
+                throw new Error('Yaroqsiz URL. Iltimos, to\'g\'ri URL kiriting.');
             }
 
             const sanitizedTitle = title.replace(/[^a-zA-Z0-9]/g, '_');
@@ -123,9 +127,7 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
 
             const fileSizeMB = getVideoSizeInMB(output);
             if (fileSizeMB > FILE_SIZE_LIMIT_MB) {
-                const fileId = await uploadFileToGoogleDrive(output);
-                const fileLink = await getFilePublicLink(fileId);
-                await bot.sendMessage(chatId, `Video hajmi ${FILE_SIZE_LIMIT_MB} MB dan katta.\nFaylni yuklab olish uchun havola: ${fileLink}`);
+                await bot.sendMessage(chatId, `Video hajmi ${FILE_SIZE_LIMIT_MB} MB dan katta. Iltimos, boshqa video kiriting.`);
             } else {
                 const botUsername = 'tg_multitask_bot';  // Bot username'ini o'zgartiring yoki dinamik tarzda oling
                 await bot.sendMessage(chatId, "Yuklash yakunlandi. Videoni yubormoqda...");
@@ -138,7 +140,7 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
             console.error('Error during video download:', error);
         }
     } else {
-        bot.sendMessage(chatId, 'Yaroqsiz URL. Iltimos, to\'g\'ri YouTube URL kiriting.');
+        bot.sendMessage(chatId, 'Yaroqsiz URL. Iltimos, to\'g\'ri YouTube yoki Instagram URL kiriting.');
     }
 };
 
@@ -169,5 +171,5 @@ const extractVideoId = (url: string): string | null => {
     } catch (error) {
         console.error('Invalid URL:', error);
         return null;
-    }
+    }   
 };
