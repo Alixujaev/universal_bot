@@ -69,7 +69,7 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
     const url = msg.text;
 
     if (url && url.startsWith("http")) {
-        bot.sendMessage(chatId, 'Processing the URL, please wait...');
+        const processingMessage = await bot.sendMessage(chatId, 'Processing the URL, please wait...');
 
         try {
             let downloadUrl: string | null = null;
@@ -132,6 +132,7 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
                     throw new Error('Invalid API response');
                 }
             } else if (url.match(/\.(jpeg|jpg|gif|png)$/) != null) {
+                await bot.deleteMessage(chatId, processingMessage.message_id);
                 await bot.sendPhoto(chatId, url);
                 return;
             } else {
@@ -168,9 +169,11 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
 
                         const fileSizeMB = getFileSizeInMB(output);
                         if (fileSizeMB > FILE_SIZE_LIMIT_MB) {
+                            await bot.deleteMessage(chatId, processingMessage.message_id);
                             await bot.sendMessage(chatId, `The video size is larger than ${FILE_SIZE_LIMIT_MB} MB. Please upload another video.`);
                         } else {
                             await bot.sendChatAction(chatId, 'upload_video');
+                            await bot.deleteMessage(chatId, processingMessage.message_id);
                             await bot.sendVideo(chatId, output, { caption: `Video uploaded. @tg_multitask_bot` });
                         }
 
@@ -182,9 +185,11 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
 
                         const fileSizeMB = getFileSizeInMB(output);
                         if (fileSizeMB > FILE_SIZE_LIMIT_MB) {
+                            await bot.deleteMessage(chatId, processingMessage.message_id);
                             await bot.sendMessage(chatId, `The audio size is larger than ${FILE_SIZE_LIMIT_MB} MB. Please upload another audio.`);
                         } else {
                             await bot.sendChatAction(chatId, 'upload_audio');
+                            await bot.deleteMessage(chatId, processingMessage.message_id);
                             await bot.sendAudio(chatId, output, { caption: `Audio uploaded. @tg_multitask_bot` });
                         }
 
@@ -193,6 +198,7 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
                 });
             }
         } catch (error) {
+            await bot.deleteMessage(chatId, processingMessage.message_id);
             bot.sendMessage(chatId, `Error downloading the video: ${error.message}. Please try again.`);
             console.error('Error during video download:', error);
         }
