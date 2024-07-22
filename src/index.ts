@@ -2,6 +2,7 @@ import TelegramBot from 'node-telegram-bot-api';
 import * as dotenv from 'dotenv';
 import { handleTranslationCommand, setTranslationLanguage, handleTextMessage } from './commands/translator';
 import { handleDownloadCommand, handleMediaUrl } from './commands/downloader';
+import { createCurrencyOptions, handleChangeCurrency, handleCurrencyCommand, handleCurrencyConversion, handleCurrencyPagination, handleCurrencySelection } from './commands/currency';
 
 dotenv.config();
 
@@ -17,11 +18,13 @@ const mainMenuOptions = {
     reply_markup: {
         keyboard: [
             [{ text: 'Tarjima' }, { text: 'Yuklash' }],
+            [{ text: 'Valyuta Kalkulyatori' }]  // Yangi menyu tugmasi
         ],
         resize_keyboard: true,
         one_time_keyboard: false
     }
 };
+
 
 const clearPreviousMessages = async (chatId: number) => {
     const messages = userMessageMap.get(chatId) || [];
@@ -72,6 +75,26 @@ bot.onText(/Yuklash/, async (msg) => {
     handleDownloadCommand(bot, chatId);
 });
 
+bot.onText(/Valyuta Kalkulyatori/, async (msg) => {
+    const chatId = msg.chat.id;
+    userContextMap.set(chatId, 'currency');
+    await clearPreviousMessages(chatId);
+    await handleCurrencyCommand(bot, chatId);
+});
+
+
+bot.onText(/\/change_currency/, async (msg) => {
+    const chatId = msg.chat.id;
+    const context = userContextMap.get(chatId);
+    if (context === 'currency') {
+        await clearPreviousMessages(chatId);
+        await handleChangeCurrency(bot, msg);
+    } else {
+        await bot.sendMessage(chatId, 'Noto‘g‘ri amal. Ushbu buyruq faqat "Valyuta Kalkulyatori" rejimida ishlaydi.');
+    }
+});
+
+
 bot.on('callback_query', async (callbackQuery) => {
     const message = callbackQuery.message;
     const data = callbackQuery.data;
@@ -81,7 +104,21 @@ bot.on('callback_query', async (callbackQuery) => {
 
         await clearPreviousMessages(chatId);
 
-        if (data === 'translate') {
+        if (data.startsWith('from_')) {
+            if (data.includes('page_')) {
+                const page = parseInt(data.split('page_')[1], 10);
+                await handleCurrencyPagination(bot, callbackQuery, 'from', page);
+            } else {
+                await handleCurrencySelection(bot, callbackQuery, data, 'from');
+            }
+        } else if (data.startsWith('to_')) {
+            if (data.includes('page_')) {
+                const page = parseInt(data.split('page_')[1], 10);
+                await handleCurrencyPagination(bot, callbackQuery, 'to', page);
+            } else {
+                await handleCurrencySelection(bot, callbackQuery, data, 'to');
+            }
+        } else if (data === 'translate') {
             userContextMap.set(chatId, 'translate');
             setTranslationLanguage(bot, chatId, userLanguageMap);
         } else if (data === 'download') {
@@ -97,13 +134,15 @@ bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const context = userContextMap.get(chatId);
 
-    if (msg.text && !msg.text.startsWith('/') && !["Bot turini o'zgartirish", 'Tarjima', 'Yuklash'].includes(msg.text)) {
+    if (msg.text && !msg.text.startsWith('/') && !["Bot turini o'zgartirish", 'Tarjima', 'Yuklash', 'Valyuta Kalkulyatori'].includes(msg.text)) {
         await clearPreviousMessages(chatId);
 
         if (context === 'translate') {
             handleTextMessage(bot, msg, userLanguageMap);
         } else if (context === 'save') {
             handleMediaUrl(bot, msg);
+        } else if (context === 'currency') {
+            handleCurrencyConversion(bot, msg);
         }
     }
 });
