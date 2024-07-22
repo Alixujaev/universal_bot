@@ -3,6 +3,7 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import * as dotenv from 'dotenv';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
 dotenv.config();
 
@@ -79,21 +80,41 @@ const getFileSizeInMB = (filePath: string): number => {
 };
 
 const fetchFromApi = async (params: object, apiUrl: string, host: string, retries: number = MAX_RETRIES): Promise<any> => {
+    console.log(`Fetching from API: ${apiUrl}`);
+    console.log(`Params: ${JSON.stringify(params)}`);
+    
     for (let attempt = 0; attempt < retries; attempt++) {
         try {
-            return await axios.get(apiUrl, {
+            console.log(`Attempt ${attempt + 1} to fetch from ${apiUrl}`);
+            
+            const response = await axios.get(apiUrl, {
                 params: params,
                 headers: {
                     'X-RapidAPI-Key': RAPIDAPI_KEY,
                     'X-RapidAPI-Host': host
                 },
-                timeout: TIMEOUT
+                timeout: TIMEOUT,
+                validateStatus: function (status) {
+                    return status >= 200 && status < 300 || status === 429; // Resolve if status is 429
+                }
             });
+
+            if (response.status === 429) {
+                throw new Error('API rate limit exceeded');
+            }
+
+            console.log(`Response received: ${response.status}`);
+            return response;
         } catch (error) {
+            console.error(`Error on attempt ${attempt + 1}: ${error.message}`);
+            if (error.message === 'API rate limit exceeded') {
+                throw error;
+            }
             if (attempt < retries - 1 && (error.code === 'ECONNABORTED' || error.response?.status === 504 || error.code === 'ECONNRESET')) {
                 console.warn(`Retrying request to ${apiUrl} (${attempt + 1}/${retries})...`);
                 continue;
             }
+            console.error(`Failed request to ${apiUrl} after ${attempt + 1} attempts`);
             throw error;
         }
     }
@@ -171,9 +192,12 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
 };
 
 const getDownloadDetails = async (url: string): Promise<{ downloadUrl: string, title: string, isVideo: boolean }> => {
+    console.log("URL:", url);
+    
     if (url.includes("youtube.com") || url.includes("youtu.be")) {
         return await getYouTubeDownloadDetails(url);
     } else if (url.includes("instagram.com")) {
+        
         return await getInstagramDownloadDetails(url);
     } else if (url.includes("tiktok.com")) {
         return await getTikTokDownloadDetails(url);
@@ -208,14 +232,15 @@ const getYouTubeDownloadDetails = async (url: string): Promise<{ downloadUrl: st
 
 const getInstagramDownloadDetails = async (url: string): Promise<{ downloadUrl: string, title: string, isVideo: boolean }> => {
     const isStory = url.includes("/stories/");
-    let apiResponse;
 
-    try {
-        apiResponse = await fetchFromApi({ url: url }, 'https://instagram-downloader.p.rapidapi.com/index', 'instagram-downloader.p.rapidapi.com');
-    } catch (error) {
-        console.error('Primary API failed:', error);
-        apiResponse = await fetchFromApi({ url: url }, 'https://instagram-downloader-download-photo-video-reels-igtv.p.rapidapi.com/data', 'instagram-downloader-download-photo-video-reels-igtv.p.rapidapi.com');
+    const apiResponse = await fetchFromApi({ url }, 'https://instagram-downloader-download-instagram-videos-stories.p.rapidapi.com/index', 'instagram-downloader-download-instagram-videos-stories.p.rapidapi.com');
+    console.log("API response:", apiResponse);
+    
+    if (!apiResponse.status || apiResponse.statusText !== 'OK') {
+        throw new Error('Invalid API response');
     }
+
+    
 
     if (isStory) {
         if (!apiResponse.data.result || !apiResponse.data.result.video_url) {
@@ -227,11 +252,12 @@ const getInstagramDownloadDetails = async (url: string): Promise<{ downloadUrl: 
 
         return { downloadUrl, title, isVideo };
     } else {
-        if (!apiResponse.data.result || !apiResponse.data.result.video_url) {
+
+        if (!apiResponse.data.media || !apiResponse.data.title) {
             throw new Error('Invalid API response');
         }
-        const downloadUrl = apiResponse.data.result.video_url;
-        const title = apiResponse.data.result.username || 'instagram_video';
+        const downloadUrl = apiResponse.data.media;
+        const title = apiResponse.data.title || 'instagram_video';
         const isVideo = true;
 
         return { downloadUrl, title, isVideo };
@@ -239,20 +265,27 @@ const getInstagramDownloadDetails = async (url: string): Promise<{ downloadUrl: 
 };
 
 const getTikTokDownloadDetails = async (url: string): Promise<{ downloadUrl: string, title: string, isVideo: boolean }> => {
-    const apiResponse = await fetchFromApi({ url: url, hd: '0' }, 'https://tiktok-download-without-watermark.p.rapidapi.com/analysis', 'tiktok-download-without-watermark.p.rapidapi.com');
+    console.log(`Getting TikTok download details for URL: ${url}`);
+    try {
+        const apiResponse = await fetchFromApi({ url: url, hd: '0' }, 'https://tiktok-download-without-watermark.p.rapidapi.com/analysis', 'tiktok-download-without-watermark.p.rapidapi.com');
+        
+        console.log(`API Response: ${JSON.stringify(apiResponse.data)}`);
+        
+        if (!apiResponse.data || apiResponse.data.code !== 0 || !apiResponse.data.data || !apiResponse.data.data.play) {
+            throw new Error('Invalid API response or no play URL found.');
+        }
 
-    console.log(apiResponse.data);
-    
-    if (!apiResponse.data || apiResponse.data.code !== 0 || !apiResponse.data.data || !apiResponse.data.data.play) {
-        throw new Error('Invalid API response');
+        const downloadUrl = apiResponse.data.data.play;
+        const title = apiResponse.data.data.title || 'tiktok_video';
+        const isVideo = true;
+
+        return { downloadUrl, title, isVideo };
+    } catch (error) {
+        console.error('Error fetching TikTok download details:', error.message);
+        throw new Error('Failed to fetch TikTok video details. Please ensure the URL is correct and try again.');
     }
-
-    const downloadUrl = apiResponse.data.data.play;
-    const title = apiResponse.data.data.title || 'tiktok_video';
-    const isVideo = true;
-
-    return { downloadUrl, title, isVideo };
 };
+
 
 const processAndSendMedia = async (bot: TelegramBot, chatId: number, downloadUrl: string, outputFileName: string, action: 'upload_video' | 'upload_audio', mediaType: 'Video' | 'Audio'): Promise<void> => {
     const output = path.resolve(__dirname, outputFileName);
@@ -328,7 +361,6 @@ const processAndSendMedia = async (bot: TelegramBot, chatId: number, downloadUrl
     }
 };
 
-
 const handleError = async (bot: TelegramBot, chatId: number, errorMessage: string, processingMessageId?: number): Promise<void> => {
     await bot.sendMessage(chatId, `Error: ${errorMessage}. Please try again.`, {
         reply_markup: {
@@ -343,6 +375,7 @@ const handleError = async (bot: TelegramBot, chatId: number, errorMessage: strin
         await bot.deleteMessage(chatId, processingMessageId.toString());
     }
 };
+
 
 const extractVideoId = (url: string): string | null => {
     console.log('URL:', url);
