@@ -74,83 +74,85 @@ const downloadConvertedFile = async (fileUrl: string, outputPath: string) => {
 };
 
 export const handleFileConversion = async (bot: TelegramBot, callbackQuery: TelegramBot.CallbackQuery) => {
-    const chatId = callbackQuery.message?.chat.id;
-    const data = callbackQuery.data;
-    const targetFormat = data.split('_')[1];
+  const chatId = callbackQuery.message?.chat.id;
+  const data = callbackQuery.data;
+  const targetFormat = data.split('_')[1];
 
-    if (!chatId || !targetFormat) return;
+  if (!chatId || !targetFormat) return;
 
-    const fileInfo = userFileMap.get(chatId);
-    if (!fileInfo) return;
+  const fileInfo = userFileMap.get(chatId);
+  if (!fileInfo) return;
 
-    const { fileId, fileName, fileType } = fileInfo;
+  const { fileId, fileName, fileType } = fileInfo;
 
-    const fileLink = await bot.getFileLink(fileId);
-    const filePath = path.join(__dirname, 'tmp', fileName);
-    const processingMessage = await bot.sendMessage(chatId, 'Processing the file, please wait...');
-    addMessageToContext(chatId, processingMessage.message_id);
+  const fileLink = await bot.getFileLink(fileId);
+  const filePath = path.join(__dirname, 'tmp', fileName);
+  const processingMessage = await bot.sendMessage(chatId, 'Processing the file, please wait...');
+  addMessageToContext(chatId, processingMessage.message_id);
 
-    // Ensure the tmp directory exists
-    if (!fs.existsSync(path.dirname(filePath))) {
-        fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    }
+  // Ensure the tmp directory exists
+  if (!fs.existsSync(path.dirname(filePath))) {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  }
 
-    try {
-        // Download the file from Telegram
-        const response = await axios({
-            method: 'GET',
-            url: fileLink,
-            responseType: 'stream'
-        });
-        const fileStream = fs.createWriteStream(filePath);
-        response.data.pipe(fileStream);
+  try {
+      // Download the file from Telegram
+      const response = await axios({
+          method: 'GET',
+          url: fileLink,
+          responseType: 'stream'
+      });
+      const fileStream = fs.createWriteStream(filePath);
+      response.data.pipe(fileStream);
 
-        await new Promise((resolve, reject) => {
-            fileStream.on('finish', resolve);
-            fileStream.on('error', reject);
-        });
+      await new Promise((resolve, reject) => {
+          fileStream.on('finish', resolve);
+          fileStream.on('error', reject);
+      });
 
-        const uploadResponse = await uploadFileToZamzar(filePath, targetFormat);
-        const jobId = uploadResponse.id;
-        let jobResponse;
+      const uploadResponse = await uploadFileToZamzar(filePath, targetFormat);
+      const jobId = uploadResponse.id;
+      let jobResponse;
 
-        // Polling the job status
-        let jobStatus = uploadResponse.status;
-        while (jobStatus !== 'successful') {
-            jobResponse = await axios.get(`${ZAMZAR_API_URL}/jobs/${jobId}`, {
-                auth: {
-                    username: ZAMZAR_API_KEY,
-                    password: ''
-                }
-            });
-            jobStatus = jobResponse.data.status;
-            await new Promise(resolve => setTimeout(resolve, 5000)); // 5 seconds delay
-        }
+      // Polling the job status
+      let jobStatus = uploadResponse.status;
+      while (jobStatus !== 'successful') {
+          jobResponse = await axios.get(`${ZAMZAR_API_URL}/jobs/${jobId}`, {
+              auth: {
+                  username: ZAMZAR_API_KEY,
+                  password: ''
+              }
+          });
+          jobStatus = jobResponse.data.status;
+          await new Promise(resolve => setTimeout(resolve, 5000)); // 5 seconds delay
+      }
 
-        const fileIdConverted = jobResponse.data.target_files[0].id;
-        const fileDownloadUrl = `${ZAMZAR_API_URL}/files/${fileIdConverted}/content`;
+      const fileIdConverted = jobResponse.data.target_files[0].id;
+      const fileDownloadUrl = `${ZAMZAR_API_URL}/files/${fileIdConverted}/content`;
 
-        const outputPath = path.join(__dirname, 'tmp', `${path.basename(fileName, path.extname(fileName))}.${targetFormat}`);
-        await downloadConvertedFile(fileDownloadUrl, outputPath);
+      const outputPath = path.join(__dirname, 'tmp', `${path.basename(fileName, path.extname(fileName))}.${targetFormat}`);
+      await downloadConvertedFile(fileDownloadUrl, outputPath);
 
-        await bot.sendDocument(chatId, outputPath);
+      await bot.sendDocument(chatId, outputPath);
 
-        // Delete the file from the server
-        fs.unlink(outputPath, (err) => {
-            if (err) console.error(`Failed to delete file: ${outputPath}`, err);
-            else console.log(`Deleted file: ${outputPath}`);
-        });
-    } catch (error) {
-        console.log('Error:', error);
-        if(error.response.status === 413) {
-            await bot.sendMessage(chatId, 'File too large. Please try with another file.');
-        }else{
-          await bot.sendMessage(chatId, `Failed to convert file: ${error.message}`);
-        }
-    } finally {
-        await bot.deleteMessage(chatId, processingMessage.message_id.toString());
-    }
+      // Delete the file from the server
+      fs.unlink(outputPath, (err) => {
+          if (err) console.error(`Failed to delete file: ${outputPath}`, err);
+          else console.log(`Deleted file: ${outputPath}`);
+      });
+  } catch (error) {
+      console.log('Error:', error);
+      await bot.sendMessage(chatId, `Failed to convert file: ${error.message}`);
+  } finally {
+      // Delete the original file from the server
+      fs.unlink(filePath, (err) => {
+          if (err) console.error(`Failed to delete file: ${filePath}`, err);
+          else console.log(`Deleted file: ${filePath}`);
+      });
+      await bot.deleteMessage(chatId, processingMessage.message_id.toString());
+  }
 };
+
 
 export const handleDocumentMessage = async (bot: TelegramBot, msg: TelegramBot.Message) => {
     const chatId = msg.chat.id;
