@@ -152,7 +152,7 @@ bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const context = userContextMap.get(chatId);
 
-    console.log(msg.video);
+    console.log(msg);
 
     if (msg.text && !msg.text.startsWith('/') && !["Bot turini o'zgartirish", 'Tarjima', 'Yuklash', 'Valyuta Kalkulyatori', 'Fayl Konvertatsiyasi'].includes(msg.text)) {
         await clearPreviousMessages(chatId);
@@ -182,7 +182,7 @@ bot.on('message', async (msg) => {
         const mimeType = 'image/jpeg'; // Photos are usually jpeg
 
         await handleDocumentMessage(bot, { ...msg, document: { file_id: fileId, file_name: fileName, mime_type: mimeType } });
-    } else if (msg.video) {
+    } else if (msg.video || msg.video_note) {
         console.log('Video message received');
         await handleVideoMessage(bot, msg);
     }

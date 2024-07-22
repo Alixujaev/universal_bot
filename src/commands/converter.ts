@@ -142,7 +142,11 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
       });
   } catch (error) {
       console.log('Error:', error);
-      await bot.sendMessage(chatId, `Failed to convert file: ${error.message}`);
+      if(error.response.status === 413){
+          await bot.sendMessage(chatId, 'The file is too large to convert. Please send a smaller file.');
+      }else{
+        await bot.sendMessage(chatId, `Failed to convert file: ${error.message}`);
+      }
   } finally {
       // Delete the original file from the server
       fs.unlink(filePath, (err) => {
@@ -160,7 +164,6 @@ export const handleDocumentMessage = async (bot: TelegramBot, msg: TelegramBot.M
     const fileName = msg.document?.file_name;
     const mimeType = msg.document?.mime_type;
 
-    console.log(msg);
 
     if (!fileId || !fileName || !mimeType) {
         await bot.sendMessage(chatId, 'Please send a valid file.');
@@ -194,11 +197,13 @@ export const handleDocumentMessage = async (bot: TelegramBot, msg: TelegramBot.M
 // Yangi funksiya videolarni qayta ishlash uchun
 export const handleVideoMessage = async (bot: TelegramBot, msg: TelegramBot.Message) => {
   const chatId = msg.chat.id;
-  const fileId = msg.video?.file_id;
-  const fileName = 'video.mp4'; // Telegram video fayl nomini ta'minlamaydi, shuning uchun default nom
-  const mimeType = msg.video?.mime_type;
+  const fileId = msg.video?.file_id || msg.video_note?.file_id
+  const fileName = `${msg.video?.file_unique_id || msg.video_note?.file_unique_id}.mp4`;
+  const mimeType = msg.video?.mime_type || 'video/mp4';
 
-  console.log(msg);
+
+  console.log('msg', msg);
+  
 
   if (!fileId || !fileName || !mimeType) {
       await bot.sendMessage(chatId, 'Please send a valid video.');
