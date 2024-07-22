@@ -67,7 +67,7 @@ export const handleCurrencySelection = async (bot: TelegramBot, callbackQuery: T
 
     if (step === 'from') {
         userCurrencyMap.set(chatId, { from: currencyCode, to: '' });
-        await bot.editMessageText(`Siz ${currencyCode} valyutasini tanladingiz. Endi qaysi valyutaga kalkulyatsiya qilishni xohlaysiz?`, {
+        await bot.editMessageText(`Siz ${currencyCode} ${currencies.find(c => c.code === currencyCode)?.flag} valyutasini tanladingiz. Endi qaysi valyutaga kalkulyatsiya qilishni xohlaysiz?`, {
             chat_id: chatId,
             message_id: messageId,
             reply_markup: createCurrencyOptions('to').reply_markup
@@ -77,7 +77,7 @@ export const handleCurrencySelection = async (bot: TelegramBot, callbackQuery: T
         if (userCurrencies) {
             userCurrencies.to = currencyCode;
             userCurrencyMap.set(chatId, userCurrencies);
-            await bot.editMessageText(`Siz ${userCurrencies.from} valyutasidan ${currencyCode} valyutasiga kalkulyatsiya qilishni tanladingiz. Iltimos, miqdorni kiriting:\n\n/change_currency - valyutani o'zgartirish`, {
+            await bot.editMessageText(`Siz ${userCurrencies.from} ${currencies.find(c => c.code === userCurrencies.from)?.flag} valyutasidan ${currencyCode} ${currencies.find(c => c.code === currencyCode)?.flag} valyutasiga kalkulyatsiya qilishni tanladingiz. Iltimos, miqdorni kiriting:\n\n/change_currency - valyutani o'zgartirish`, {
                 chat_id: chatId,
                 message_id: messageId,
                 reply_markup: { inline_keyboard: [] } // Toza markup bilan
@@ -119,7 +119,7 @@ export const handleCurrencyConversion = async (bot: TelegramBot, msg: TelegramBo
             const rate = response.data.conversion_rates[userCurrencies.to];
             const convertedAmount = (amount * rate).toFixed(2);
 
-            const sentMessage = await bot.sendMessage(chatId, `${amount} ${userCurrencies.from} = ${convertedAmount} ${userCurrencies.to}`, {
+            const sentMessage = await bot.sendMessage(chatId, `${amount} ${userCurrencies.from} ${currencies.find(c => c.code === userCurrencies.from)?.flag} = ${convertedAmount} ${userCurrencies.to} ${currencies.find(c => c.code === userCurrencies.to)?.flag}`, {
                 reply_markup: {
                     keyboard: [
                         [{ text: "Bot turini o'zgartirish" }]

@@ -15,22 +15,21 @@ export const setTranslationLanguage = async (bot: TelegramBot, chatId: number, u
     addMessageToContext(chatId, sentMessage.message_id);
 };
 
-export const handleTranslationCommand = async (bot: TelegramBot, message: TelegramBot.Message, data: string, userLanguageMap: Map<number, { code: string, name: string, flag: string }>) => {
-    const chatId = message.chat.id;
+export const handleTranslationCommand = async (bot: TelegramBot, callbackQuery: TelegramBot.CallbackQuery, data: string, userLanguageMap: Map<number, { code: string, name: string, flag: string }>) => {
+    const chatId = callbackQuery.message?.chat.id;
+    const messageId = callbackQuery.message?.message_id;
     const langCode = data.split('_')[1];
     const language = languages.find(lang => lang.code === langCode);
+
+    if (!chatId || !messageId) return;
+
     if (language) {
         userLanguageMap.set(chatId, language);
-        const sentMessage = await bot.sendMessage(chatId, `Tarjima tili ${language.flag} ${language.name} qilib o'rnatildi. Endi matnni kiriting.`, {
-            reply_markup: {
-                keyboard: [
-                    [{ text: "Bot turini o'zgartirish" }]
-                ],
-                resize_keyboard: true,
-                one_time_keyboard: false
-            }
+        await bot.editMessageText(`Tarjima tili ${language.flag} ${language.name} qilib o'rnatildi. Endi matnni kiriting:\n\n/setlanguage orqali tilni o'zgartirishingiz mumkin`, {
+            chat_id: chatId,
+            message_id: messageId,
+            reply_markup: { inline_keyboard: [] } // Toza markup bilan
         });
-        addMessageToContext(chatId, sentMessage.message_id);
     }
 };
 
@@ -45,14 +44,15 @@ export const handleTextMessage = async (bot: TelegramBot, msg: TelegramBot.Messa
             try {
                 bot.sendChatAction(chatId, 'typing');
                 const translatedText = await translateText(text, targetLanguage.code);
-                const sentMessage = await bot.sendMessage(chatId, `Tarjima: ${translatedText}`, {
+                const sentMessage = await bot.sendMessage(chatId, `${translatedText}`, {
                     reply_markup: {
                         keyboard: [
                             [{ text: "Bot turini o'zgartirish" }]
                         ],
                         resize_keyboard: true,
                         one_time_keyboard: false
-                    }
+                    },
+                    reply_to_message_id: userMessageMap.get(chatId)[0]
                 });
                 addMessageToContext(chatId, sentMessage.message_id);
             } catch (error) {

@@ -66,6 +66,17 @@ bot.onText(/Tarjima/, async (msg) => {
     setTranslationLanguage(bot, chatId, userLanguageMap);
 });
 
+bot.onText(/\/setlanguage/, async (msg) => {
+    const chatId = msg.chat.id;
+    const context = userContextMap.get(chatId);
+    if (context === 'translate') {
+        await clearPreviousMessages(chatId);
+        await setTranslationLanguage(bot, chatId, userLanguageMap);
+    } else {
+        await bot.sendMessage(chatId, 'Noto‘g‘ri amal. Ushbu buyruq faqat "Tarjima" rejimida ishlaydi.');
+    }
+});
+
 bot.onText(/Yuklash/, async (msg) => {
     const chatId = msg.chat.id;
     userContextMap.set(chatId, 'save');
@@ -85,7 +96,7 @@ bot.onText(/Valyuta Kalkulyatori/, async (msg) => {
 
 bot.onText(/\/change_currency/, async (msg) => {
     const chatId = msg.chat.id;
-    const context = userContextMap.get(chatId);
+    const context = userContextMap.get(chatId); 
     if (context === 'currency') {
         await clearPreviousMessages(chatId);
         await handleChangeCurrency(bot, msg);
@@ -125,7 +136,7 @@ bot.on('callback_query', async (callbackQuery) => {
             userContextMap.set(chatId, 'save');
             handleDownloadCommand(bot, chatId);
         } else if (data.startsWith('lang_')) {
-            handleTranslationCommand(bot, message, data, userLanguageMap);
+            await handleTranslationCommand(bot, callbackQuery, data, userLanguageMap);
         }
     }
 });
