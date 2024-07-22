@@ -24,7 +24,15 @@ const addMessageToContext = (chatId: number, messageId: number) => {
 };
 
 export const handleConvertCommand = async (bot: TelegramBot, chatId: number) => {
-    const sentMessage = await bot.sendMessage(chatId, 'Please send the file you want to convert.');
+    const sentMessage = await bot.sendMessage(chatId, 'Please send the file you want to convert.', {
+        reply_markup: {
+            keyboard: [
+                [{ text: "Bot turini o'zgartirish" }],
+            ],
+            resize_keyboard: true,
+            one_time_keyboard: false
+        },
+    });
     addMessageToContext(chatId, sentMessage.message_id);
 };
 
@@ -87,7 +95,12 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
 
   const fileLink = await bot.getFileLink(fileId);
   const filePath = path.join(__dirname, 'tmp', fileName);
-  const processingMessage = await bot.sendMessage(chatId, 'Processing the file, please wait...');
+  const processingMessage = await bot.sendMessage(chatId, 'Processing the file, please wait...', {
+    reply_markup: {
+        remove_keyboard: true
+    },
+    reply_to_message_id: callbackQuery.message?.message_id
+  });
   addMessageToContext(chatId, processingMessage.message_id);
 
   // Ensure the tmp directory exists
@@ -133,7 +146,17 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
       const outputPath = path.join(__dirname, 'tmp', `${path.basename(fileName, path.extname(fileName))}.${targetFormat}`);
       await downloadConvertedFile(fileDownloadUrl, outputPath);
 
-      await bot.sendDocument(chatId, outputPath);
+      await bot.sendDocument(chatId, outputPath, {
+        reply_markup: {
+            keyboard: [
+                [{ text: "Bot turini o'zgartirish" }],
+            ],
+            resize_keyboard: true,
+            one_time_keyboard: false
+        },
+          caption: '🤖 @tg_multitask_bot',
+          reply_to_message_id: callbackQuery.message?.message_id
+      });
 
       // Delete the file from the server
       fs.unlink(outputPath, (err) => {
@@ -143,9 +166,27 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
   } catch (error) {
       console.log('Error:', error);
       if(error.response.status === 413){
-          await bot.sendMessage(chatId, 'The file is too large to convert. Please send a smaller file.');
+          await bot.sendMessage(chatId, 'The file is too large to convert. Please send a smaller file.', {
+            reply_markup: {
+                keyboard: [
+                    [{ text: "Bot turini o'zgartirish" }],
+                ],
+                resize_keyboard: true,
+                one_time_keyboard: false
+            },
+              reply_to_message_id: callbackQuery.message?.message_id
+          });
       }else{
-        await bot.sendMessage(chatId, `Failed to convert file: ${error.message}`);
+        await bot.sendMessage(chatId, `Failed to convert file: ${error.message}`, {
+            reply_markup: {
+                keyboard: [
+                    [{ text: "Bot turini o'zgartirish" }],
+                ],
+                resize_keyboard: true,
+                one_time_keyboard: false
+            },
+              reply_to_message_id: callbackQuery.message?.message_id
+        });
       }
   } finally {
       // Delete the original file from the server
@@ -166,7 +207,14 @@ export const handleDocumentMessage = async (bot: TelegramBot, msg: TelegramBot.M
 
 
     if (!fileId || !fileName || !mimeType) {
-        await bot.sendMessage(chatId, 'Please send a valid file.');
+        await bot.sendMessage(chatId, 'Please send a valid file.', { reply_markup: {
+            keyboard: [
+                [{ text: "Bot turini o'zgartirish" }],
+            ],
+            resize_keyboard: true,
+            one_time_keyboard: false
+        },
+          reply_to_message_id: msg.message_id });
         return;
     }
 
@@ -174,7 +222,16 @@ export const handleDocumentMessage = async (bot: TelegramBot, msg: TelegramBot.M
     const availableFormats = await getConversionFormats(fileType);
 
     if (availableFormats.length === 0) {
-        await bot.sendMessage(chatId, 'No available conversion formats for this file type.');
+        await bot.sendMessage(chatId, 'No available conversion formats for this file type.', {
+            reply_markup: {
+                keyboard: [
+                    [{ text: "Bot turini o'zgartirish" }],
+                ],
+                resize_keyboard: true,
+                one_time_keyboard: false
+            },
+              reply_to_message_id: msg.message_id
+        });
         return;
     }
 
@@ -189,8 +246,9 @@ export const handleDocumentMessage = async (bot: TelegramBot, msg: TelegramBot.M
 
     await bot.sendMessage(chatId, `Fayl turi ${fileType.toUpperCase()}\nUni quyidagilarga konvertatsiyalash mumkin:`, {
         reply_markup: {
-            inline_keyboard: formatKeyboard
-        }
+            inline_keyboard: formatKeyboard,
+        },
+        reply_to_message_id: msg.message_id
     });
 };
 
@@ -201,12 +259,17 @@ export const handleVideoMessage = async (bot: TelegramBot, msg: TelegramBot.Mess
   const fileName = `${msg.video?.file_unique_id || msg.video_note?.file_unique_id}.mp4`;
   const mimeType = msg.video?.mime_type || 'video/mp4';
 
-
-  console.log('msg', msg);
-  
-
   if (!fileId || !fileName || !mimeType) {
-      await bot.sendMessage(chatId, 'Please send a valid video.');
+      await bot.sendMessage(chatId, 'Please send a valid video.', {
+        reply_markup: {
+            keyboard: [
+                [{ text: "Bot turini o'zgartirish" }],
+            ],
+            resize_keyboard: true,
+            one_time_keyboard: false
+        },
+          reply_to_message_id: msg.message_id
+      });
       return;
   }
 
@@ -214,7 +277,16 @@ export const handleVideoMessage = async (bot: TelegramBot, msg: TelegramBot.Mess
   const availableFormats = await getConversionFormats(fileType);
 
   if (availableFormats.length === 0) {
-      await bot.sendMessage(chatId, 'No available conversion formats for this video type.');
+      await bot.sendMessage(chatId, 'No available conversion formats for this video type.', {
+        reply_markup: {
+            keyboard: [
+                [{ text: "Bot turini o'zgartirish" }],
+            ],
+            resize_keyboard: true,
+            one_time_keyboard: false
+        },
+          reply_to_message_id: msg.message_id
+      });
       return;
   }
 
@@ -229,8 +301,9 @@ export const handleVideoMessage = async (bot: TelegramBot, msg: TelegramBot.Mess
 
   await bot.sendMessage(chatId, `Video turi ${fileType.toUpperCase()}\nUni quyidagilarga konvertatsiyalash mumkin:`, {
       reply_markup: {
-          inline_keyboard: formatKeyboard
-      }
+          inline_keyboard: formatKeyboard,
+    },
+    reply_to_message_id: msg.message_id
   });
 };
 
