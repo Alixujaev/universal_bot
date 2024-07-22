@@ -1,6 +1,6 @@
 import { handleCurrencyCommand, handleCurrencySelection, handleCurrencyConversion, handleCurrencyPagination, handleChangeCurrency } from './commands/currency';
 import { handleTranslationCommand, setTranslationLanguage, handleTextMessage } from './commands/translator';
-import { handleConvertCommand, handleFileConversion, handleDocumentMessage } from './commands/converter';
+import { handleConvertCommand, handleFileConversion, handleDocumentMessage, handleVideoMessage } from './commands/converter';
 import { handleDownloadCommand, handleMediaUrl } from './commands/downloader';
 
 import TelegramBot from 'node-telegram-bot-api';
@@ -9,7 +9,7 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
+export const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
 const userContextMap = new Map<number, string>();
 const userLanguageMap = new Map<number, { code: string, name: string, flag: string }>();
@@ -152,6 +152,8 @@ bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const context = userContextMap.get(chatId);
 
+    console.log(msg.video);
+
     if (msg.text && !msg.text.startsWith('/') && !["Bot turini o'zgartirish", 'Tarjima', 'Yuklash', 'Valyuta Kalkulyatori', 'Fayl Konvertatsiyasi'].includes(msg.text)) {
         await clearPreviousMessages(chatId);
 
@@ -162,7 +164,12 @@ bot.on('message', async (msg) => {
         } else if (context === 'currency') {
             handleCurrencyConversion(bot, msg);
         } else if (context === 'convert') {
-            await handleDocumentMessage(bot, msg);
+            if (msg.document) {
+                await handleDocumentMessage(bot, msg);
+            } else if (msg.video) {
+                console.log('Video message received');
+                await handleVideoMessage(bot, msg);
+            }
         }
     }
 
@@ -175,5 +182,8 @@ bot.on('message', async (msg) => {
         const mimeType = 'image/jpeg'; // Photos are usually jpeg
 
         await handleDocumentMessage(bot, { ...msg, document: { file_id: fileId, file_name: fileName, mime_type: mimeType } });
+    } else if (msg.video) {
+        console.log('Video message received');
+        await handleVideoMessage(bot, msg);
     }
 });

@@ -3,6 +3,7 @@ import axios from 'axios';
 import * as dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import FormData from 'form-data';
 
 dotenv.config();
 
@@ -27,29 +28,29 @@ export const handleConvertCommand = async (bot: TelegramBot, chatId: number) => 
     addMessageToContext(chatId, sentMessage.message_id);
 };
 
-const getConversionFormats = async (fileType: string) => {
-    const response = await axios.get(`${ZAMZAR_API_URL}/formats`, {
+const getConversionFormats = async (fileType: string) => {  
+    const response = await axios.get(`${ZAMZAR_API_URL}/formats/${fileType}`, {
         auth: {
             username: ZAMZAR_API_KEY,
             password: ''
         }
     });
 
-    // Find the format data for the given file type
-    console.log('fileType:', fileType);
-    
-    const formatData = response.data.data.find((format: any) => format.name === fileType.toLowerCase());
-    return formatData ? formatData.targets : [];
+    return response.data.targets ? response.data.targets : [];
 };
 
-const uploadFileToZamzar = async (fileLink: string, targetFormat: string) => {
-    const response = await axios.post(`${ZAMZAR_API_URL}/jobs`, {
-        source_url: fileLink,
-        target_format: targetFormat
-    }, {
+const uploadFileToZamzar = async (filePath: string, targetFormat: string) => {
+    const formData = new FormData();
+    formData.append('source_file', fs.createReadStream(filePath));
+    formData.append('target_format', targetFormat);
+
+    const response = await axios.post(`${ZAMZAR_API_URL}/jobs`, formData, {
         auth: {
             username: ZAMZAR_API_KEY,
             password: ''
+        },
+        headers: {
+            ...formData.getHeaders()
         }
     });
 
@@ -85,11 +86,31 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
     const { fileId, fileName, fileType } = fileInfo;
 
     const fileLink = await bot.getFileLink(fileId);
+    const filePath = path.join(__dirname, 'tmp', fileName);
     const processingMessage = await bot.sendMessage(chatId, 'Processing the file, please wait...');
     addMessageToContext(chatId, processingMessage.message_id);
 
+    // Ensure the tmp directory exists
+    if (!fs.existsSync(path.dirname(filePath))) {
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    }
+
     try {
-        const uploadResponse = await uploadFileToZamzar(fileLink, targetFormat);
+        // Download the file from Telegram
+        const response = await axios({
+            method: 'GET',
+            url: fileLink,
+            responseType: 'stream'
+        });
+        const fileStream = fs.createWriteStream(filePath);
+        response.data.pipe(fileStream);
+
+        await new Promise((resolve, reject) => {
+            fileStream.on('finish', resolve);
+            fileStream.on('error', reject);
+        });
+
+        const uploadResponse = await uploadFileToZamzar(filePath, targetFormat);
         const jobId = uploadResponse.id;
         let jobResponse;
 
@@ -109,12 +130,23 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
         const fileIdConverted = jobResponse.data.target_files[0].id;
         const fileDownloadUrl = `${ZAMZAR_API_URL}/files/${fileIdConverted}/content`;
 
-        const outputPath = `/tmp/${path.basename(fileName, path.extname(fileName))}.${targetFormat}`;
+        const outputPath = path.join(__dirname, 'tmp', `${path.basename(fileName, path.extname(fileName))}.${targetFormat}`);
         await downloadConvertedFile(fileDownloadUrl, outputPath);
 
         await bot.sendDocument(chatId, outputPath);
+
+        // Delete the file from the server
+        fs.unlink(outputPath, (err) => {
+            if (err) console.error(`Failed to delete file: ${outputPath}`, err);
+            else console.log(`Deleted file: ${outputPath}`);
+        });
     } catch (error) {
-        await bot.sendMessage(chatId, `Failed to convert file: ${error.message}`);
+        console.log('Error:', error);
+        if(error.response.status === 413) {
+            await bot.sendMessage(chatId, 'File too large. Please try with another file.');
+        }else{
+          await bot.sendMessage(chatId, `Failed to convert file: ${error.message}`);
+        }
     } finally {
         await bot.deleteMessage(chatId, processingMessage.message_id.toString());
     }
@@ -126,14 +158,14 @@ export const handleDocumentMessage = async (bot: TelegramBot, msg: TelegramBot.M
     const fileName = msg.document?.file_name;
     const mimeType = msg.document?.mime_type;
 
-    
+    console.log(msg);
 
     if (!fileId || !fileName || !mimeType) {
         await bot.sendMessage(chatId, 'Please send a valid file.');
         return;
     }
 
-    const fileType = fileName.split('.')[1];
+    const fileType = fileName.split('.').pop();
     const availableFormats = await getConversionFormats(fileType);
 
     if (availableFormats.length === 0) {
@@ -143,7 +175,7 @@ export const handleDocumentMessage = async (bot: TelegramBot, msg: TelegramBot.M
 
     userFileMap.set(chatId, { fileId, fileName, fileType });
 
-    const formatButtons = availableFormats.map((format: {name: string}) => ({ text: format.name.toUpperCase(), callback_data: `convert_${format}` }));
+    const formatButtons = availableFormats.map((format: {name: string}) => ({ text: format.name.toUpperCase(), callback_data: `convert_${format.name}` }));
     const formatKeyboard = [];
 
     for (let i = 0; i < formatButtons.length; i += 3) {
@@ -156,3 +188,42 @@ export const handleDocumentMessage = async (bot: TelegramBot, msg: TelegramBot.M
         }
     });
 };
+
+// Yangi funksiya videolarni qayta ishlash uchun
+export const handleVideoMessage = async (bot: TelegramBot, msg: TelegramBot.Message) => {
+  const chatId = msg.chat.id;
+  const fileId = msg.video?.file_id;
+  const fileName = 'video.mp4'; // Telegram video fayl nomini ta'minlamaydi, shuning uchun default nom
+  const mimeType = msg.video?.mime_type;
+
+  console.log(msg);
+
+  if (!fileId || !fileName || !mimeType) {
+      await bot.sendMessage(chatId, 'Please send a valid video.');
+      return;
+  }
+
+  const fileType = fileName.split('.').pop();
+  const availableFormats = await getConversionFormats(fileType);
+
+  if (availableFormats.length === 0) {
+      await bot.sendMessage(chatId, 'No available conversion formats for this video type.');
+      return;
+  }
+
+  userFileMap.set(chatId, { fileId, fileName, fileType });
+
+  const formatButtons = availableFormats.map((format: { name: string }) => ({ text: format.name.toUpperCase(), callback_data: `convert_${format.name}` }));
+  const formatKeyboard = [];
+
+  for (let i = 0; i < formatButtons.length; i += 3) {
+      formatKeyboard.push(formatButtons.slice(i, i + 3));
+  }
+
+  await bot.sendMessage(chatId, `Video turi ${fileType.toUpperCase()}\nUni quyidagilarga konvertatsiyalash mumkin:`, {
+      reply_markup: {
+          inline_keyboard: formatKeyboard
+      }
+  });
+};
+
