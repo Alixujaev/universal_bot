@@ -1,8 +1,10 @@
+import { handleCurrencyCommand, handleCurrencySelection, handleCurrencyConversion, handleCurrencyPagination, handleChangeCurrency } from './commands/currency';
+import { handleTranslationCommand, setTranslationLanguage, handleTextMessage } from './commands/translator';
+import { handleConvertCommand, handleFileConversion, handleDocumentMessage } from './commands/converter';
+import { handleDownloadCommand, handleMediaUrl } from './commands/downloader';
+
 import TelegramBot from 'node-telegram-bot-api';
 import * as dotenv from 'dotenv';
-import { handleTranslationCommand, setTranslationLanguage, handleTextMessage } from './commands/translator';
-import { handleDownloadCommand, handleMediaUrl } from './commands/downloader';
-import { handleCurrencyCommand, handleCurrencySelection, handleCurrencyConversion, handleCurrencyPagination, handleChangeCurrency } from './commands/currency';
 
 dotenv.config();
 
@@ -17,7 +19,7 @@ const mainMenuOptions = {
     reply_markup: {
         keyboard: [
             [{ text: 'Tarjima' }, { text: 'Yuklash' }],
-            [{ text: 'Valyuta Kalkulyatori' }]
+            [{ text: 'Valyuta Kalkulyatori' }, { text: 'Fayl Konvertatsiyasi' }]
         ],
         resize_keyboard: true,
         one_time_keyboard: false
@@ -80,6 +82,13 @@ bot.onText(/Valyuta Kalkulyatori/, async (msg) => {
     await handleCurrencyCommand(bot, chatId);
 });
 
+bot.onText(/Fayl Konvertatsiyasi/, async (msg) => {
+    const chatId = msg.chat.id;
+    userContextMap.set(chatId, 'convert');
+    await clearPreviousMessages(chatId);
+    await handleConvertCommand(bot, chatId);
+});
+
 bot.onText(/\/change_currency/, async (msg) => {
     const chatId = msg.chat.id;
     const context = userContextMap.get(chatId);
@@ -133,6 +142,8 @@ bot.on('callback_query', async (callbackQuery) => {
             handleDownloadCommand(bot, chatId);
         } else if (data.startsWith('lang_')) {
             await handleTranslationCommand(bot, callbackQuery, data, userLanguageMap);
+        } else if (data.startsWith('convert_')) {
+            await handleFileConversion(bot, callbackQuery);
         }
     }
 });
@@ -141,7 +152,7 @@ bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const context = userContextMap.get(chatId);
 
-    if (msg.text && !msg.text.startsWith('/') && !["Bot turini o'zgartirish", 'Tarjima', 'Yuklash', 'Valyuta Kalkulyatori'].includes(msg.text)) {
+    if (msg.text && !msg.text.startsWith('/') && !["Bot turini o'zgartirish", 'Tarjima', 'Yuklash', 'Valyuta Kalkulyatori', 'Fayl Konvertatsiyasi'].includes(msg.text)) {
         await clearPreviousMessages(chatId);
 
         if (context === 'translate') {
@@ -150,6 +161,19 @@ bot.on('message', async (msg) => {
             handleMediaUrl(bot, msg);
         } else if (context === 'currency') {
             handleCurrencyConversion(bot, msg);
+        } else if (context === 'convert') {
+            await handleDocumentMessage(bot, msg);
         }
+    }
+
+    if (msg.document) {
+        await handleDocumentMessage(bot, msg);
+    } else if (msg.photo) {
+        // If a photo is sent, handle it similarly to a document
+        const fileId = msg.photo[msg.photo.length - 1].file_id; // Use the highest resolution photo
+        const fileName = `photo_${fileId}.jpg`; // Assign a name to the photo
+        const mimeType = 'image/jpeg'; // Photos are usually jpeg
+
+        await handleDocumentMessage(bot, { ...msg, document: { file_id: fileId, file_name: fileName, mime_type: mimeType } });
     }
 });
