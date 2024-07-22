@@ -176,6 +176,7 @@ bot.on('message', async (msg) => {
     if (msg.document) {
         await handleDocumentMessage(bot, msg);
     } else if (msg.photo) {
+        
         // If a photo is sent, handle it similarly to a document
         const fileId = msg.photo[msg.photo.length - 1].file_id; // Use the highest resolution photo
         const fileName = `photo_${fileId}.jpg`; // Assign a name to the photo

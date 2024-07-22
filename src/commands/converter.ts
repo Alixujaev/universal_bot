@@ -109,6 +109,7 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
   }
 
   try {
+    
       // Download the file from Telegram
       const response = await axios({
           method: 'GET',
@@ -145,6 +146,7 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
 
       const outputPath = path.join(__dirname, 'tmp', `${path.basename(fileName, path.extname(fileName))}.${targetFormat}`);
       await downloadConvertedFile(fileDownloadUrl, outputPath);
+      await bot.sendChatAction(chatId, 'upload_document');
 
       await bot.sendDocument(chatId, outputPath, {
         reply_markup: {
@@ -217,7 +219,7 @@ export const handleDocumentMessage = async (bot: TelegramBot, msg: TelegramBot.M
           reply_to_message_id: msg.message_id });
         return;
     }
-
+    await bot.sendChatAction(chatId, 'typing');
     const fileType = fileName.split('.').pop();
     const availableFormats = await getConversionFormats(fileType);
 
@@ -273,6 +275,7 @@ export const handleVideoMessage = async (bot: TelegramBot, msg: TelegramBot.Mess
       return;
   }
 
+  await bot.sendChatAction(chatId, 'typing');
   const fileType = fileName.split('.').pop();
   const availableFormats = await getConversionFormats(fileType);
 
