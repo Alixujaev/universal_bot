@@ -2,12 +2,11 @@ import TelegramBot from 'node-telegram-bot-api';
 import * as dotenv from 'dotenv';
 import { handleTranslationCommand, setTranslationLanguage, handleTextMessage } from './commands/translator';
 import { handleDownloadCommand, handleMediaUrl } from './commands/downloader';
-import { createCurrencyOptions, handleChangeCurrency, handleCurrencyCommand, handleCurrencyConversion, handleCurrencyPagination, handleCurrencySelection } from './commands/currency';
+import { handleCurrencyCommand, handleCurrencySelection, handleCurrencyConversion, handleCurrencyPagination, handleChangeCurrency } from './commands/currency';
 
 dotenv.config();
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
 const userContextMap = new Map<number, string>();
@@ -18,13 +17,12 @@ const mainMenuOptions = {
     reply_markup: {
         keyboard: [
             [{ text: 'Tarjima' }, { text: 'Yuklash' }],
-            [{ text: 'Valyuta Kalkulyatori' }]  // Yangi menyu tugmasi
+            [{ text: 'Valyuta Kalkulyatori' }]
         ],
         resize_keyboard: true,
         one_time_keyboard: false
     }
 };
-
 
 const clearPreviousMessages = async (chatId: number) => {
     const messages = userMessageMap.get(chatId) || [];
@@ -66,17 +64,6 @@ bot.onText(/Tarjima/, async (msg) => {
     setTranslationLanguage(bot, chatId, userLanguageMap);
 });
 
-bot.onText(/\/setlanguage/, async (msg) => {
-    const chatId = msg.chat.id;
-    const context = userContextMap.get(chatId);
-    if (context === 'translate') {
-        await clearPreviousMessages(chatId);
-        await setTranslationLanguage(bot, chatId, userLanguageMap);
-    } else {
-        await bot.sendMessage(chatId, 'Noto‘g‘ri amal. Ushbu buyruq faqat "Tarjima" rejimida ishlaydi.');
-    }
-});
-
 bot.onText(/Yuklash/, async (msg) => {
     const chatId = msg.chat.id;
     userContextMap.set(chatId, 'save');
@@ -93,10 +80,9 @@ bot.onText(/Valyuta Kalkulyatori/, async (msg) => {
     await handleCurrencyCommand(bot, chatId);
 });
 
-
 bot.onText(/\/change_currency/, async (msg) => {
     const chatId = msg.chat.id;
-    const context = userContextMap.get(chatId); 
+    const context = userContextMap.get(chatId);
     if (context === 'currency') {
         await clearPreviousMessages(chatId);
         await handleChangeCurrency(bot, msg);
@@ -105,6 +91,16 @@ bot.onText(/\/change_currency/, async (msg) => {
     }
 });
 
+bot.onText(/\/setlanguage/, async (msg) => {
+    const chatId = msg.chat.id;
+    const context = userContextMap.get(chatId);
+    if (context === 'translate') {
+        await clearPreviousMessages(chatId);
+        await setTranslationLanguage(bot, chatId, userLanguageMap);
+    } else {
+        await bot.sendMessage(chatId, 'Noto‘g‘ri amal. Ushbu buyruq faqat "Tarjima" rejimida ishlaydi.');
+    }
+});
 
 bot.on('callback_query', async (callbackQuery) => {
     const message = callbackQuery.message;
