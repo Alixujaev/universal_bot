@@ -79,6 +79,8 @@ bot.onText(/Valyuta Kalkulyatori/, async (msg) => {
     const chatId = msg.chat.id;
     userContextMap.set(chatId, 'currency');
     await clearPreviousMessages(chatId);
+    const infoMessage = await bot.sendMessage(chatId, 'Siz valyuta kalkulyatorini tanladingiz');
+    addMessageToContext(chatId, infoMessage.message_id);
     await handleCurrencyCommand(bot, chatId);
 });
 
@@ -86,6 +88,8 @@ bot.onText(/Fayl Konvertatsiyasi/, async (msg) => {
     const chatId = msg.chat.id;
     userContextMap.set(chatId, 'convert');
     await clearPreviousMessages(chatId);
+    const infoMessage = await bot.sendMessage(chatId, 'Siz valyuta kalkulyatorini tanladingiz');
+    addMessageToContext(chatId, infoMessage.message_id);
     await handleConvertCommand(bot, chatId);
 });
 
@@ -151,8 +155,6 @@ bot.on('callback_query', async (callbackQuery) => {
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const context = userContextMap.get(chatId);
-
-    console.log(msg);
 
     if (msg.text && !msg.text.startsWith('/') && !["Bot turini o'zgartirish", 'Tarjima', 'Yuklash', 'Valyuta Kalkulyatori', 'Fayl Konvertatsiyasi'].includes(msg.text)) {
         await clearPreviousMessages(chatId);

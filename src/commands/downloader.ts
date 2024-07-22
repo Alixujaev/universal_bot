@@ -127,11 +127,7 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
     if (url && url.startsWith("http")) {
         const processingMessage = await bot.sendMessage(chatId, 'Processing the URL, please wait...', {
             reply_markup: {
-                keyboard: [
-                    [{ text: "Bot turini o'zgartirish" }]
-                ],
-                resize_keyboard: true,
-                one_time_keyboard: false
+                remove_keyboard: true
             }
         });
         addMessageToContext(chatId, processingMessage.message_id);
@@ -149,7 +145,8 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
                                 { text: 'Video', callback_data: 'video' },
                                 { text: 'Audio', callback_data: 'audio' }
                             ]
-                        ]
+                        ],
+                        
                     }
                 });
 
@@ -186,7 +183,8 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
                 ],
                 resize_keyboard: true,
                 one_time_keyboard: false
-            }
+            },
+            reply_to_message_id: msg.message_id
         });
     }
 };

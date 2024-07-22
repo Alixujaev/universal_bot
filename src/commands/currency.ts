@@ -80,7 +80,7 @@ export const handleCurrencySelection = async (bot: TelegramBot, callbackQuery: T
             await bot.editMessageText(`Siz ${userCurrencies.from} ${currencies.find(c => c.code === userCurrencies.from)?.flag} valyutasidan ${currencyCode} ${currencies.find(c => c.code === currencyCode)?.flag} valyutasiga kalkulyatsiya qilishni tanladingiz. Iltimos, miqdorni kiriting:\n\n/change_currency - valyutani o'zgartirish`, {
                 chat_id: chatId,
                 message_id: messageId,
-                reply_markup: { inline_keyboard: [] } // Toza markup bilan
+                reply_markup: { inline_keyboard: [], } // Toza markup bilan
             });
         }
     }
@@ -107,7 +107,16 @@ export const handleCurrencyConversion = async (bot: TelegramBot, msg: TelegramBo
         const amount = parseFloat(text);
 
         if (isNaN(amount)) {
-            const sentMessage = await bot.sendMessage(chatId, 'Iltimos, to\'g\'ri miqdorni kiriting:');
+            const sentMessage = await bot.sendMessage(chatId, 'Iltimos, to\'g\'ri miqdorni kiriting:', {
+                reply_markup: {
+                    keyboard: [
+                        [{ text: "Bot turini o'zgartirish" }]
+                    ],
+                    resize_keyboard: true,
+                    one_time_keyboard: false
+                },
+                reply_to_message_id: msg.message_id
+            });
             addMessageToContext(chatId, sentMessage.message_id);
             return;
         }
@@ -126,7 +135,8 @@ export const handleCurrencyConversion = async (bot: TelegramBot, msg: TelegramBo
                     ],
                     resize_keyboard: true,
                     one_time_keyboard: false
-                }
+                },
+                reply_to_message_id: msg.message_id
             });
             addMessageToContext(chatId, sentMessage.message_id);
         } catch (error) {

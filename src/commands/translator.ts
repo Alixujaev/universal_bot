@@ -52,7 +52,7 @@ export const handleTextMessage = async (bot: TelegramBot, msg: TelegramBot.Messa
                         resize_keyboard: true,
                         one_time_keyboard: false
                     },
-                    reply_to_message_id: userMessageMap.get(chatId)[0]
+                    reply_to_message_id: msg.message_id
                 });
                 addMessageToContext(chatId, sentMessage.message_id);
             } catch (error) {
