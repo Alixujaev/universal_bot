@@ -28,7 +28,7 @@ export const handleTranslationCommand = async (bot: TelegramBot, callbackQuery: 
         await bot.editMessageText(`Tarjima tili ${language.flag} ${language.name} qilib o'rnatildi. Endi matnni kiriting:\n\n/setlanguage orqali tilni o'zgartirishingiz mumkin`, {
             chat_id: chatId,
             message_id: messageId,
-            reply_markup: { inline_keyboard: [] } // Toza markup bilan
+            reply_markup: { inline_keyboard: [],  } // Toza markup bilan
         });
     }
 };
