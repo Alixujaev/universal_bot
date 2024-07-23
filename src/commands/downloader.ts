@@ -3,7 +3,6 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import * as dotenv from 'dotenv';
-import { HttpsProxyAgent } from 'https-proxy-agent';
 
 dotenv.config();
 
@@ -29,7 +28,7 @@ const addMessageToContext = (chatId: number, messageId: number): void => {
 };
 
 export const handleDownloadCommand = async (bot: TelegramBot, chatId: number): Promise<void> => {
-    const sentMessage = await bot.sendMessage(chatId, 'Please send the URL of the video or image you want to download.', {
+    const sentMessage = await bot.sendMessage(chatId, 'Please send the URL of the video you want to download.', {
         reply_markup: {
             keyboard: [
                 [{ text: "Bot turini o'zgartirish" }]
@@ -42,7 +41,6 @@ export const handleDownloadCommand = async (bot: TelegramBot, chatId: number): P
 };
 
 const downloadVideo = async (url: string, output: string): Promise<void> => {
-    console.log(`Downloading video: ${url} to ${output}`);
     
     const response = await axios({
         method: 'GET',
@@ -52,7 +50,6 @@ const downloadVideo = async (url: string, output: string): Promise<void> => {
     });
 
     return new Promise((resolve, reject) => {
-        console.log(`Downloading video: ${url} to ${output}`);
         
         const stream = response.data.pipe(fs.createWriteStream(output));
         stream.on('finish', () => resolve());
@@ -63,25 +60,7 @@ const downloadVideo = async (url: string, output: string): Promise<void> => {
     });
 };
 
-const downloadAudio = async (url: string, output: string): Promise<void> => {
-    const response = await axios({
-        method: 'GET',
-        url: url,
-        responseType: 'arraybuffer',
-        timeout: TIMEOUT
-    });
-
-    await fs.promises.writeFile(output, response.data);
-};
-
-const getFileSizeInMB = (filePath: string): number => {
-    const stats = fs.statSync(filePath);
-    return stats.size / (1024 * 1024);  // Convert to MB
-};
-
 const fetchFromApi = async (params: object, apiUrl: string, host: string, retries: number = MAX_RETRIES): Promise<any> => {
-    console.log(`Fetching from API: ${apiUrl}`);
-    console.log(`Params: ${JSON.stringify(params)}`);
     
     for (let attempt = 0; attempt < retries; attempt++) {
         try {
@@ -103,7 +82,6 @@ const fetchFromApi = async (params: object, apiUrl: string, host: string, retrie
                 throw new Error('API rate limit exceeded');
             }
 
-            console.log(`Response received: ${response.status}`);
             return response;
         } catch (error) {
             console.error(`Error on attempt ${attempt + 1}: ${error.message}`);
@@ -133,50 +111,45 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
         addMessageToContext(chatId, processingMessage.message_id);
 
         try {
-            const { downloadUrl, title, isVideo } = await getDownloadDetails(url);
+            const { title, isVideo, channel, formats } = await getYouTubeDownloadDetails(url);
 
             const sanitizedTitle = title.replace(/[^a-zA-Z0-9]/g, '_');
 
             if (isVideo) {
-                await bot.sendMessage(chatId, 'Do you want the video or just the audio (MP3)?', {
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: 'Video', callback_data: 'video' },
-                                { text: 'Audio', callback_data: 'audio' }
-                            ]
-                        ],
-                        
-                    }
-                });
+                await sendPaginatedFormats(bot, chatId, formats, title, channel, 1, msg);
 
-                bot.once('callback_query', async (callbackQuery) => {
-                    const action = callbackQuery.data;
+                bot.on('callback_query', async (callbackQuery) => {
+                    const data = callbackQuery.data;
                     const userId = callbackQuery.from.id;
                     const replyMessageId = callbackQuery.message?.message_id;
 
-                    if (replyMessageId) {
-                        await bot.deleteMessage(userId, replyMessageId.toString());
-                    }
-
-                    try {
-                        if (action === 'video') {
-                            await processAndSendMedia(bot, chatId, downloadUrl, `${sanitizedTitle}.mp4`, 'upload_video', 'Video');
-                        } else if (action === 'audio') {
-                            await processAndSendMedia(bot, chatId, downloadUrl, `${sanitizedTitle}.mp3`, 'upload_audio', 'Audio');
+                    if (data.startsWith('page_')) {
+                        const page = parseInt(data.split('_')[1], 10);
+                        await sendPaginatedFormats(bot, chatId, formats, title, channel, page, msg);
+                    } else if (data.startsWith('format_')) {
+                        const formatIndex = parseInt(data.split('_')[1], 10);
+                        const formatUrl = formats[formatIndex].url;
+                        const formatSize = formats[formatIndex].size;
+                        
+                        if (replyMessageId) {
+                            await bot.deleteMessage(userId, replyMessageId.toString());
                         }
-                    } catch (error) {
-                        await handleError(bot, chatId, `Failed to process media: ${error.message}`);
-                    }
 
-                    await bot.deleteMessage(chatId, processingMessage.message_id.toString());
+                        try {
+                            await processAndSendMedia(bot, chatId, formatUrl, `${sanitizedTitle}.mp4`, 'upload_video', 'Video', formatSize);
+                        } catch (error) {
+                            await handleError(bot, chatId, `Failed to process media: ${error.message}`);
+                        }
+
+                        await bot.deleteMessage(chatId, processingMessage.message_id.toString());
+                    }
                 });
             }
         } catch (error) {
             await handleError(bot, chatId, error.message, processingMessage.message_id);
         }
     } else {
-        bot.sendMessage(chatId, 'Invalid URL. Please enter a correct YouTube, Instagram, or TikTok URL.', {
+        bot.sendMessage(chatId, 'Invalid URL. Please enter a correct YouTube URL.', {
             reply_markup: {
                 keyboard: [
                     [{ text: "Bot turini o'zgartirish" }]
@@ -189,131 +162,99 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
     }
 };
 
-const getDownloadDetails = async (url: string): Promise<{ downloadUrl: string, title: string, isVideo: boolean }> => {
-    console.log("URL:", url);
-    
-    if (url.includes("youtube.com") || url.includes("youtu.be")) {
-        return await getYouTubeDownloadDetails(url);
-    } else if (url.includes("instagram.com")) {
-        
-        return await getInstagramDownloadDetails(url);
-    } else if (url.includes("tiktok.com")) {
-        return await getTikTokDownloadDetails(url);
-    } else if (url.match(/\.(jpeg|jpg|gif|png)$/) != null) {
-        throw new Error('Invalid URL. Please enter a YouTube, Instagram, or TikTok URL.');
-    } else {
-        throw new Error('Invalid URL. Please enter a correct URL.');
-    }
-};
-
-const getYouTubeDownloadDetails = async (url: string): Promise<{ downloadUrl: string, title: string, isVideo: boolean }> => {
+const getYouTubeDownloadDetails = async (url: string): Promise<{ title: string, channel: string, isVideo: boolean, formats: any[] }> => {
     const videoId = extractVideoId(url);
     if (!videoId) {
         throw new Error('Invalid YouTube URL. Please enter a correct URL.');
     }
 
-    const apiResponse = await fetchFromApi({ videoId: videoId }, 'https://youtube-media-downloader.p.rapidapi.com/v2/video/details', 'youtube-media-downloader.p.rapidapi.com');
-    if (!apiResponse.data.status || apiResponse.data.errorId !== 'Success') {
+    const apiResponse = await fetchFromApi({ id: videoId }, 'https://yt-api.p.rapidapi.com/dl', 'yt-api.p.rapidapi.com');
+    if (!apiResponse.data || apiResponse.data.status !== 'OK') {
         throw new Error('Invalid API response');
     }
-
-    const downloadUrl = apiResponse.data.videos.items[0].url;
+    
     const title = apiResponse.data.title;
+    const channel = apiResponse.data.channelTitle;
+    const allFormats = [
+        ...apiResponse.data.formats.map((format: any) => ({
+            url: format.url,
+            qualityLabel: format.qualityLabel,
+            quality: format.quality,
+            mimeType: format.mimeType,
+            size: format.contentLength
+        })),
+        ...apiResponse.data.adaptiveFormats.map((format: any) => ({
+            url: format.url,
+            qualityLabel: format.qualityLabel,
+            quality: format.quality,
+            mimeType: format.mimeType,
+            size: format.contentLength
+        }))
+    ];
+
+    // Filter out duplicate quality formats
+    const uniqueFormats = allFormats.reduce((acc: any[], current) => {
+        const x = acc.find(item => item.quality === current.quality);
+        if (!x) {
+            return acc.concat([current]);
+        } else {
+            return acc;
+        }
+    }, []);
+
+    if (!uniqueFormats.length) {
+        throw new Error('No available formats found');
+    }
+
     const isVideo = true;
 
-    if (!downloadUrl || !title) {
-        throw new Error('Invalid API response');
-    }
-
-    return { downloadUrl, title, isVideo };
+    
+    return { title, channel, isVideo, formats: uniqueFormats.reverse() };
 };
 
-const getInstagramDownloadDetails = async (url: string): Promise<{ downloadUrl: string, title: string, isVideo: boolean }> => {
-    const isStory = url.includes("/stories/");
-
-    const apiResponse = await fetchFromApi({ url }, 'https://instagram-downloader-download-instagram-videos-stories.p.rapidapi.com/index', 'instagram-downloader-download-instagram-videos-stories.p.rapidapi.com');
-    console.log("API response:", apiResponse);
-    
-    if (!apiResponse.status || apiResponse.statusText !== 'OK') {
-        throw new Error('Invalid API response');
-    }
+const sendPaginatedFormats = async (bot: TelegramBot, chatId: number, formats: any[], title: string, channel: string, page: number, msg: TelegramBot.Message): Promise<void> => {
+    const itemsPerPage = 18;
+    const offset = (page - 1) * itemsPerPage;
+    const paginatedFormats = formats.slice(offset, offset + itemsPerPage);
 
     
 
-    if (isStory) {
-        if (!apiResponse.data.result || !apiResponse.data.result.video_url) {
-            throw new Error('Invalid API response');
-        }
-        const downloadUrl = apiResponse.data.result.video_url;
-        const title = apiResponse.data.result.username || 'instagram_story';
-        const isVideo = true;
+    const formatButtons = paginatedFormats.map((format, index) => ({
+        text: `${format.qualityLabel ? format.qualityLabel : format.quality}`,
+        callback_data: `format_${offset + index}`
+    }));
 
-        return { downloadUrl, title, isVideo };
-    } else {
-
-        if (!apiResponse.data.media || !apiResponse.data.title) {
-            throw new Error('Invalid API response');
-        }
-        const downloadUrl = apiResponse.data.media;
-        const title = apiResponse.data.title || 'instagram_video';
-        const isVideo = true;
-
-        return { downloadUrl, title, isVideo };
+    const inlineKeyboard = [];
+    for (let i = 0; i < formatButtons.length; i += 3) {
+        inlineKeyboard.push(formatButtons.slice(i, i + 3));
     }
+
+    const paginationButtons = [];
+    if (page > 1) {
+        paginationButtons.push({ text: '⬅️ Previous', callback_data: `page_${page - 1}` });
+    }
+    if (offset + itemsPerPage < formats.length) {
+        paginationButtons.push({ text: 'Next ➡️', callback_data: `page_${page + 1}` });
+    }
+    if (paginationButtons.length > 0) {
+        inlineKeyboard.push(paginationButtons);
+    }
+
+    await bot.sendMessage(chatId, `📹${title}\n👤${channel}\n\n${
+        paginatedFormats.map(format => `✅ ${format.qualityLabel ? format.qualityLabel : format.quality} ${(format.size/1048576).toFixed(0)} MB`).join('\n')
+        + '\n\n' + 'Select a format ↓'
+    }`, {
+        reply_markup: {
+            inline_keyboard: inlineKeyboard
+        },
+        reply_to_message_id: msg.message_id
+    });
 };
 
-const getTikTokDownloadDetails = async (url: string): Promise<{ downloadUrl: string, title: string, isVideo: boolean }> => {
-    console.log(`Getting TikTok download details for URL: ${url}`);
-    try {
-        const apiResponse = await fetchFromApi({ url: url, hd: '0' }, 'https://tiktok-download-without-watermark.p.rapidapi.com/analysis', 'tiktok-download-without-watermark.p.rapidapi.com');
-        
-        console.log(`API Response: ${JSON.stringify(apiResponse.data)}`);
-        
-        if (!apiResponse.data || apiResponse.data.code !== 0 || !apiResponse.data.data || !apiResponse.data.data.play) {
-            throw new Error('Invalid API response or no play URL found.');
-        }
-
-        const downloadUrl = apiResponse.data.data.play;
-        const title = apiResponse.data.data.title || 'tiktok_video';
-        const isVideo = true;
-
-        return { downloadUrl, title, isVideo };
-    } catch (error) {
-        console.error('Error fetching TikTok download details:', error.message);
-        throw new Error('Failed to fetch TikTok video details. Please ensure the URL is correct and try again.');
-    }
-};
-
-
-const processAndSendMedia = async (bot: TelegramBot, chatId: number, downloadUrl: string, outputFileName: string, action: 'upload_video' | 'upload_audio', mediaType: 'Video' | 'Audio'): Promise<void> => {
+const processAndSendMedia = async (bot: TelegramBot, chatId: number, downloadUrl: string, outputFileName: string, action: 'upload_video' | 'upload_audio', mediaType: 'Video' | 'Audio', size: any): Promise<void> => {
     const output = path.resolve(__dirname, outputFileName);
-    
 
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        try {
-            console.log('mediaType:', mediaType);
-            console.log('downloadUrl:', downloadUrl);
-            
-            if (mediaType === 'Video') {
-                await downloadVideo(downloadUrl, output);
-            } else {
-                await downloadAudio(downloadUrl, output);
-            }
-            break;
-        } catch (error) {
-            console.log('error:', error);
-            
-            if (attempt < MAX_RETRIES - 1) {
-                console.warn(`Retrying download (${attempt + 1}/${MAX_RETRIES})...`);
-            } else {
-                console.error(`Failed to download ${mediaType.toLowerCase()}: ${error.message}`);
-                throw error;
-            }
-        }
-    }
-
-    const fileSizeMB = getFileSizeInMB(output);
-    if (fileSizeMB > FILE_SIZE_LIMIT_MB) {
+    if (size/1048576 > FILE_SIZE_LIMIT_MB) {
         await bot.sendMessage(chatId, `The ${mediaType.toLowerCase()} size is larger than ${FILE_SIZE_LIMIT_MB} MB. Please upload another ${mediaType.toLowerCase()}.`, {
             reply_markup: {
                 keyboard: [
@@ -324,22 +265,32 @@ const processAndSendMedia = async (bot: TelegramBot, chatId: number, downloadUrl
             }
         });
     } else {
+        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+            try {
+                console.log('mediaType:', mediaType);
+                console.log('downloadUrl:', downloadUrl);
+                
+                if (mediaType === 'Video') {
+                    await downloadVideo(downloadUrl, output);
+                }
+                break;
+            } catch (error) {
+                console.log('error:', error);
+                
+                if (attempt < MAX_RETRIES - 1) {
+                    console.warn(`Retrying download (${attempt + 1}/${MAX_RETRIES})...`);
+                } else {
+                    console.error(`Failed to download ${mediaType.toLowerCase()}: ${error.message}`);
+                    throw error;
+                }
+            }
+        }
+
         await bot.sendChatAction(chatId, action);
         try {
             if (mediaType === 'Video') {
                 await bot.sendVideo(chatId, output, {
                     caption: `Video uploaded. @tg_multitask_bot`,
-                    reply_markup: {
-                        keyboard: [
-                            [{ text: "Bot turini o'zgartirish" }]
-                        ],
-                        resize_keyboard: true,
-                        one_time_keyboard: false
-                    }
-                });
-            } else {
-                await bot.sendAudio(chatId, output, {
-                    caption: `Audio uploaded. @tg_multitask_bot`,
                     reply_markup: {
                         keyboard: [
                             [{ text: "Bot turini o'zgartirish" }]
@@ -372,7 +323,6 @@ const handleError = async (bot: TelegramBot, chatId: number, errorMessage: strin
         await bot.deleteMessage(chatId, processingMessageId.toString());
     }
 };
-
 
 const extractVideoId = (url: string): string | null => {
     console.log('URL:', url);
