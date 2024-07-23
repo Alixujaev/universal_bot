@@ -7,9 +7,12 @@ import TelegramBot from 'node-telegram-bot-api';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
-
+const LOCAL_BOT_API_URL = process.env.LOCAL_BOT_API_URL || 'https://api.telegram.org/bot';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-export const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
+export const bot = new TelegramBot(TELEGRAM_TOKEN, { 
+    polling: true,
+    baseApiUrl: LOCAL_BOT_API_URL
+ });
 
 const userContextMap = new Map<number, string>();
 const userLanguageMap = new Map<number, { code: string, name: string, flag: string }>();
