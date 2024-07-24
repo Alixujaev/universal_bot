@@ -3,8 +3,8 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import * as dotenv from 'dotenv';
-import {exec} from "child_process"
-const ffmpegPath = 'C:\\ffmpeg\\ffmpeg-7.0.1-essentials_build\\bin\\ffmpeg.exe'; 
+import { exec } from 'child_process';
+const ffmpegPath = 'C:\\ffmpeg\\ffmpeg-7.0.1-essentials_build\\bin\\ffmpeg.exe';
 dotenv.config();
 
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
@@ -26,19 +26,6 @@ const addMessageToContext = (chatId: number, messageId: number): void => {
     const messages = userMessageMap[chatId] || [];
     messages.push(messageId);
     userMessageMap[chatId] = messages;
-};
-
-export const handleDownloadCommand = async (bot: TelegramBot, chatId: number): Promise<void> => {
-    const sentMessage = await bot.sendMessage(chatId, 'Please send the URL of the video you want to download.', {
-        reply_markup: {
-            keyboard: [
-                [{ text: "Bot turini o'zgartirish" }]
-            ],
-            resize_keyboard: true,
-            one_time_keyboard: false
-        }
-    });
-    addMessageToContext(chatId, sentMessage.message_id);
 };
 
 const downloadFile = async (url: string, output: string): Promise<void> => {
@@ -88,73 +75,107 @@ const mergeVideoAndAudio = (videoPath: string, audioPath: string, outputPath: st
     });
 };
 
-const processAndSendMedia = async (bot: any, chatId: number, downloadUrl: string, outputFileName: string, audioOutputFileName: string, action: 'upload_video' | 'upload_audio', mediaType: 'Video' | 'Audio', size: any, audioUrl: string): Promise<void> => {
+const downloadAndProcessMedia = async (
+    downloadUrl: string | { url: string, width?: number, height?: number },
+    outputFileName: string,
+    audioOutputFileName: string,
+    mediaType: 'Video' | 'Audio' | 'Image',
+    size: any,
+    audioUrl: string
+): Promise<{ outputPath: string, audioOutputPath: string, mergedOutputPath: string, photoOutputPath: string }> => {
     const output = path.resolve(__dirname, outputFileName);
+    const photoOutput = path.resolve(__dirname, `${outputFileName}.jpg`);   
     const audioOutput = path.resolve(__dirname, audioOutputFileName);
     const mergedOutput = path.resolve(__dirname, 'merged_output.mp4');
 
     if (size / 1048576 > FILE_SIZE_LIMIT_MB) {
-        await bot.sendMessage(chatId, `The ${mediaType.toLowerCase()} size is larger than ${FILE_SIZE_LIMIT_MB} MB. Please upload another ${mediaType.toLowerCase()}.`, {
-            reply_markup: {
-                keyboard: [
-                    [{ text: "Bot turini o'zgartirish" }]
-                ],
-                resize_keyboard: true,
-                one_time_keyboard: false
-            }
-        });
-    } else {
-        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-            try {
-                console.log('mediaType:', mediaType);
-                console.log('downloadUrl:', downloadUrl);
+        throw new Error(`The ${mediaType.toLowerCase()} size is larger than ${FILE_SIZE_LIMIT_MB} MB.`);
+    }
 
-                if (mediaType === 'Video') {
-                    await downloadVideoAndAudio(downloadUrl, audioUrl, output, audioOutput);
-                    await mergeVideoAndAudio(output, audioOutput, mergedOutput);
-                }
-                break;
-            } catch (error) {
-                console.log('error:', error);
-
-                if (attempt < MAX_RETRIES - 1) {
-                    console.warn(`Retrying download (${attempt + 1}/${MAX_RETRIES})...`);
-                } else {
-                    console.error(`Failed to download ${mediaType.toLowerCase()}: ${error.message}`);
-                    throw error;
-                }
-            }
-        }
-
-        await bot.sendChatAction(chatId, action);
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         try {
+            console.log('mediaType:', mediaType);
+            console.log('downloadUrl:', downloadUrl);
+
             if (mediaType === 'Video') {
-                await bot.sendVideo(chatId, mergedOutput, {
-                    caption: `Video uploaded. @tg_multitask_bot`,
-                    reply_markup: {
-                        keyboard: [
-                            [{ text: "Bot turini o'zgartirish" }]
-                        ],
-                        resize_keyboard: true,
-                        one_time_keyboard: false
-                    }
-                });
+                await downloadVideoAndAudio((downloadUrl as string), audioUrl, output, audioOutput);
+                await mergeVideoAndAudio(output, audioOutput, mergedOutput);
+            } else if (mediaType === 'Image') {
+                const imageUrl = typeof downloadUrl === 'string' ? downloadUrl : downloadUrl.url;
+                await downloadFile(imageUrl, photoOutput);
+            } else {
+                await downloadFile((downloadUrl as string), output);
             }
+            break;
         } catch (error) {
-            console.error(`Failed to send ${mediaType.toLowerCase()}: ${error.message}`);
-            throw error;
-        } finally {
-            if (fs.existsSync(output)) fs.unlinkSync(output);  // Delete the video file from the server
-            if (fs.existsSync(audioOutput)) fs.unlinkSync(audioOutput);  // Delete the audio file from the server
-            if (fs.existsSync(mergedOutput)) fs.unlinkSync(mergedOutput);  // Delete the merged file from the server
+            console.log('error:', error);
+
+            if (attempt < MAX_RETRIES - 1) {
+                console.warn(`Retrying download (${attempt + 1}/${MAX_RETRIES})...`);
+            } else {
+                console.error(`Failed to download ${mediaType.toLowerCase()}: ${error.message}`);
+                throw error;
+            }
         }
+    }
+
+    return { outputPath: output, audioOutputPath: audioOutput, mergedOutputPath: mergedOutput, photoOutputPath: photoOutput };
+};
+
+const sendMedia = async (
+    bot: TelegramBot,
+    chatId: number,
+    mediaType: 'Video' | 'Audio' | 'Image',
+    filePaths: { outputPath: string, audioOutputPath: string, mergedOutputPath: string, photoOutputPath: string }
+): Promise<void> => {
+    await bot.sendChatAction(chatId, mediaType === 'Video' ? 'upload_video' : mediaType === 'Audio' ? 'upload_audio' : 'upload_photo');
+
+    try {
+        if (mediaType === 'Video') {
+            await bot.sendVideo(chatId, filePaths.mergedOutputPath, {
+                caption: `@tg_multitask_bot 🤖`,
+                reply_markup: {
+                    keyboard: [
+                        [{ text: "Bot turini o'zgartirish" }]
+                    ],
+                    resize_keyboard: true,
+                    one_time_keyboard: false
+                }
+            });
+        } else if (mediaType === 'Audio') {
+            await bot.sendAudio(chatId, filePaths.outputPath, {
+                caption: `@tg_multitask_bot 🤖`,
+                reply_markup: {
+                    keyboard: [
+                        [{ text: "Bot turini o'zgartirish" }]
+                    ],
+                    resize_keyboard: true,
+                    one_time_keyboard: false
+                }
+            });
+        } else if (mediaType === 'Image') {
+            await bot.sendDocument(chatId, filePaths.photoOutputPath, {
+                caption: `@tg_multitask_bot 🤖`,
+                reply_markup: {
+                    keyboard: [
+                        [{ text: "Bot turini o'zgartirish" }]
+                    ],
+                    resize_keyboard: true,
+                    one_time_keyboard: false
+                }
+            });
+        }
+    } catch (error) {
+        console.error(`Failed to send ${mediaType.toLowerCase()}: ${error.message}`);
+        throw error;
+    } finally {
+        if (fs.existsSync(filePaths.outputPath)) fs.unlinkSync(filePaths.outputPath);  // Delete the file from the server
+        if (mediaType === 'Video' && fs.existsSync(filePaths.audioOutputPath)) fs.unlinkSync(filePaths.audioOutputPath);  // Delete the audio file from the server
+        if (mediaType === 'Video' && fs.existsSync(filePaths.mergedOutputPath)) fs.unlinkSync(filePaths.mergedOutputPath);  // Delete the merged file from the server
     }
 };
 
-
-
 const fetchFromApi = async (params: object, apiUrl: string, host: string, retries: number = MAX_RETRIES): Promise<any> => {
-    
     for (let attempt = 0; attempt < retries; attempt++) {
         try {
             console.log(`Attempt ${attempt + 1} to fetch from ${apiUrl}`);
@@ -177,6 +198,7 @@ const fetchFromApi = async (params: object, apiUrl: string, host: string, retrie
 
             return response;
         } catch (error) {
+
             console.error(`Error on attempt ${attempt + 1}: ${error.message}`);
             if (error.message === 'API rate limit exceeded') {
                 throw error;
@@ -191,71 +213,6 @@ const fetchFromApi = async (params: object, apiUrl: string, host: string, retrie
     }
 };
 
-export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message): Promise<void> => {
-    const chatId = msg.chat.id;
-    const url = msg.text;
-
-    if (url && url.startsWith("http")) {
-        const processingMessage = await bot.sendMessage(chatId, 'Processing the URL, please wait...', {
-            reply_markup: {
-                remove_keyboard: true
-            }
-        });
-        addMessageToContext(chatId, processingMessage.message_id);
-
-        try {
-            const { title, isVideo, channel, formats } = await getYouTubeDownloadDetails(url);
-
-            const sanitizedTitle = title.replace(/[^a-zA-Z0-9]/g, '_');
-
-            if (isVideo) {
-                await sendPaginatedFormats(bot, chatId, formats, title, channel, 1, msg);
-
-                bot.on('callback_query', async (callbackQuery) => {
-                    const data = callbackQuery.data;
-                    const userId = callbackQuery.from.id;
-                    const replyMessageId = callbackQuery.message?.message_id;
-
-                    if (data.startsWith('page_')) {
-                        const page = parseInt(data.split('_')[1], 10);
-                        await sendPaginatedFormats(bot, chatId, formats, title, channel, page, msg);
-                    } else if (data.startsWith('format_')) {
-                        const formatIndex = parseInt(data.split('_')[1], 10);
-                        const formatUrl = formats[formatIndex].url;
-                        const audioUrl = formats[0].url;
-                        const formatSize = formats[formatIndex].size;
-                        
-                        if (replyMessageId) {
-                            await bot.deleteMessage(userId, replyMessageId.toString());
-                        }
-
-                        try {
-                            await processAndSendMedia(bot, chatId, formatUrl, `${sanitizedTitle}.mp4`, `${sanitizedTitle}.mp3`, 'upload_video', 'Video', formatSize, audioUrl);
-                        } catch (error) {
-                            await handleError(bot, chatId, `Failed to process media: ${error.message}`);
-                        }
-
-                        await bot.deleteMessage(chatId, processingMessage.message_id.toString());
-                    }
-                });
-            }
-        } catch (error) {
-            await handleError(bot, chatId, error.message, processingMessage.message_id);
-        }
-    } else {
-        bot.sendMessage(chatId, 'Invalid URL. Please enter a correct YouTube URL.', {
-            reply_markup: {
-                keyboard: [
-                    [{ text: "Bot turini o'zgartirish" }]
-                ],
-                resize_keyboard: true,
-                one_time_keyboard: false
-            },
-            reply_to_message_id: msg.message_id
-        });
-    }
-};
-
 const getYouTubeDownloadDetails = async (url: string): Promise<{ title: string, channel: string, isVideo: boolean, formats: any[] }> => {
     const videoId = extractVideoId(url);
     if (!videoId) {
@@ -267,21 +224,19 @@ const getYouTubeDownloadDetails = async (url: string): Promise<{ title: string, 
         throw new Error('Invalid API response');
     }
 
-    console.log(apiResponse.data);
-    
-    
     const title = apiResponse.data.title;
     const channel = apiResponse.data.channelTitle;
+    
     const allFormats = [
         ...apiResponse.data.formats.map((format: any) => ({
-            url: format.url,
+            url: format?.url,
             qualityLabel: format.qualityLabel,
             quality: format.quality,
             mimeType: format.mimeType,
             size: format.contentLength
         })),
         ...apiResponse.data.adaptiveFormats.map((format: any) => ({
-            url: format.url,
+            url: format?.url,
             qualityLabel: format.qualityLabel,
             quality: format.quality,
             mimeType: format.mimeType,
@@ -304,17 +259,23 @@ const getYouTubeDownloadDetails = async (url: string): Promise<{ title: string, 
     }
 
     const isVideo = true;
-    
-    
-    return { title, channel, isVideo, formats: [{...allFormats.reverse()[0], qualityLabel: 'mp3'}, ...uniqueFormats.reverse(), {...apiResponse.data.thumbnail[apiResponse.data.thumbnail.length - 1], qualityLabel: 'image'}] };
+
+    return {
+        title,
+        channel,
+        isVideo,
+        formats: [
+            {...allFormats.reverse()[0], qualityLabel: 'mp3'},
+            ...uniqueFormats.reverse(),
+            { url: apiResponse.data.thumbnail[apiResponse.data.thumbnail.length - 1], qualityLabel: 'image' }
+        ]
+    };
 };
 
 const sendPaginatedFormats = async (bot: TelegramBot, chatId: number, formats: any[], title: string, channel: string, page: number, msg: TelegramBot.Message): Promise<void> => {
     const itemsPerPage = 18;
     const offset = (page - 1) * itemsPerPage;
     const paginatedFormats = formats.slice(offset, offset + itemsPerPage);
-
-    
 
     const formatButtons = paginatedFormats.map((format, index) => ({
         text: `${format.qualityLabel == 'mp3' ? '🔉' : format.qualityLabel == 'image' ? '🖼' : '📹'} ${
@@ -339,9 +300,6 @@ const sendPaginatedFormats = async (bot: TelegramBot, chatId: number, formats: a
         inlineKeyboard.push(paginationButtons);
     }
 
-    console.log(paginatedFormats);
-    
-
     await bot.sendMessage(chatId, `📹${title}\n👤${channel}\n\n${
         paginatedFormats.filter(format => format.qualityLabel !== 'image').map(format => `✅ ${format.qualityLabel ? format.qualityLabel : format.quality} ${(format.size/1048576).toFixed(0)} MB`).join('\n')
         + '\n\n' + 'Select a format ↓'
@@ -354,6 +312,7 @@ const sendPaginatedFormats = async (bot: TelegramBot, chatId: number, formats: a
 };
 
 const handleError = async (bot: TelegramBot, chatId: number, errorMessage: string, processingMessageId?: number): Promise<void> => {
+    console.error('Error:', errorMessage);
     await bot.sendMessage(chatId, `Error: ${errorMessage}. Please try again.`, {
         reply_markup: {
             keyboard: [
@@ -369,7 +328,6 @@ const handleError = async (bot: TelegramBot, chatId: number, errorMessage: strin
 };
 
 const extractVideoId = (url: string): string | null => {
-    console.log('URL:', url);
 
     try {
         const urlObj = new URL(url);
@@ -397,3 +355,100 @@ const extractVideoId = (url: string): string | null => {
         return null;
     }
 };
+
+export const handleDownloadCommand = async (bot: TelegramBot, chatId: number): Promise<void> => {
+    const sentMessage = await bot.sendMessage(chatId, 'Please send the URL of the video you want to download.', {
+        reply_markup: {
+            keyboard: [
+                [{ text: "Bot turini o'zgartirish" }]
+            ],
+            resize_keyboard: true,
+            one_time_keyboard: false
+        }
+    });
+    addMessageToContext(chatId, sentMessage.message_id);
+};
+
+export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message): Promise<void> => {
+    const chatId = msg.chat.id;
+    const url = msg.text;
+
+    if (url && url.startsWith("http")) {
+        const processingMessage = await bot.sendMessage(chatId, 'Processing the URL, please wait...', {
+            reply_markup: {
+                remove_keyboard: true
+            }
+        });
+        addMessageToContext(chatId, processingMessage.message_id);
+
+        try {
+            const { title, isVideo, channel, formats } = await getYouTubeDownloadDetails(url);
+
+            const sanitizedTitle = title.replace(/[^a-zA-Z0-9]/g, '_');
+
+            if (isVideo) {
+                await sendPaginatedFormats(bot, chatId, formats, title, channel, 1, msg);
+
+                bot.on('callback_query', async (callbackQuery) => {
+                    const data = callbackQuery.data;
+                    const userId = callbackQuery.from.id;
+                    const replyMessageId = callbackQuery.message?.message_id;
+                    const chatId = callbackQuery.message?.chat.id;
+
+                    if (data.startsWith('page_')) {
+                        const page = parseInt(data.split('_')[1], 10);
+                        await sendPaginatedFormats(bot, chatId, formats, title, channel, page, msg);
+                    } else if (data.startsWith('format_')) {
+                        const formatIndex = parseInt(data.split('_')[1], 10);
+                        const selectedFormat = formats[formatIndex];
+                        const formatUrl = selectedFormat.url;
+                        const formatSize = selectedFormat.size;
+
+                        if (replyMessageId) {
+                            await bot.deleteMessage(userId, replyMessageId.toString());
+                        }
+
+                        let mediaType: 'Video' | 'Audio' | 'Image' = 'Video';
+                        if (selectedFormat.qualityLabel === 'mp3') {
+                            mediaType = 'Audio';
+                        } else if (selectedFormat.qualityLabel === 'image') {
+                            mediaType = 'Image';
+                            
+                        }
+
+                        try {
+                            const filePaths = await downloadAndProcessMedia(
+                                formatUrl,
+                                `${sanitizedTitle}.${mediaType === 'Audio' ? 'mp3' : 'mp4'}`,
+                                `${sanitizedTitle}.mp3`,
+                                mediaType,
+                                formatSize,
+                                formats[0].url
+                            );
+
+                            await sendMedia(bot, chatId, mediaType, filePaths);
+                        } catch (error) {
+                            await handleError(bot, chatId, `Failed to process media: ${error.message}`);
+                        }
+
+                        await bot.deleteMessage(chatId, processingMessage.message_id.toString());
+                    }
+                });
+            }
+        } catch (error) {
+            await handleError(bot, chatId, error.message, processingMessage.message_id);
+        }
+    } else {
+        bot.sendMessage(chatId, 'Invalid URL. Please enter a correct YouTube URL.', {
+            reply_markup: {
+                keyboard: [
+                    [{ text: "Bot turini o'zgartirish" }]
+                ],
+                resize_keyboard: true,
+                one_time_keyboard: false
+            },
+            reply_to_message_id: msg.message_id
+        });
+    }
+};
+
