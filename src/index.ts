@@ -11,7 +11,7 @@ const LOCAL_BOT_API_URL = process.env.LOCAL_BOT_API_URL || 'https://api.telegram
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 export const bot = new TelegramBot(TELEGRAM_TOKEN, { 
     polling: true,
-    baseApiUrl: LOCAL_BOT_API_URL
+    // baseApiUrl: LOCAL_BOT_API_URL
  });
 
 const userContextMap = new Map<number, string>();

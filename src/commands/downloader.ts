@@ -97,10 +97,10 @@ const downloadAndProcessMedia = async (
     audioUrl: string,
     instaVideo?: boolean
 ): Promise<{ outputPath: string, audioOutputPath: string, mergedOutputPath: string, photoOutputPath: string }> => {
-    const output = path.resolve(__dirname, outputFileName);
-    const photoOutput = path.resolve(__dirname, `${outputFileName}.jpg`);   
-    const audioOutput = path.resolve(__dirname, audioOutputFileName);
-    const mergedOutput = path.resolve(__dirname, 'merged_output.mp4');
+    const output = path.resolve(__dirname, 'tmp', outputFileName);
+    const photoOutput = path.resolve(__dirname, 'tmp', `${outputFileName}.jpg`);   
+    const audioOutput = path.resolve(__dirname, 'tmp', audioOutputFileName);
+    const mergedOutput = path.resolve(__dirname, 'tmp', `merged_${outputFileName}.mp4`);
 
     if (size / 1048576 > FILE_SIZE_LIMIT_MB) {
         throw new Error(`The ${mediaType.toLowerCase()} size is larger than ${FILE_SIZE_LIMIT_MB} MB.`);
