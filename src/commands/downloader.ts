@@ -4,6 +4,17 @@ import fs from 'fs';
 import path from 'path';
 import * as dotenv from 'dotenv';
 import { exec } from 'child_process';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+
+
+const proxyHost = '35.185.196.38'; // Tanlagan proxy serveringizning IP manzili
+const proxyPort = '3128'; // Tanlagan proxy serveringizning porti
+
+const proxyUrl = `http://${proxyHost}:${proxyPort}`;
+
+const agent = new HttpsProxyAgent(proxyUrl);
+
+
 const ffmpegPath = 'C:\\ffmpeg\\ffmpeg-7.0.1-essentials_build\\bin\\ffmpeg.exe';
 dotenv.config();
 
@@ -29,6 +40,8 @@ const addMessageToContext = (chatId: number, messageId: number): void => {
 };
 
 const downloadFile = async (url: string, output: string): Promise<void> => {
+    console.log('Tiktok url', url);
+    
     const response = await axios({
         method: 'GET',
         url: url,
@@ -413,6 +426,40 @@ const getInstagramDownloadDetails = async (url: string): Promise<{ downloadUrl: 
     return { downloadUrl, title, extension };
 };
 
+
+const getTikTokDownloadDetails = async (url: string): Promise<{downloadUrl: string, title: string, extension: string}> => {
+    
+    const options = {
+        method: 'GET',
+        url: 'https://tiktok-video-no-watermark2.p.rapidapi.com/',
+        params: { url: url },
+        headers: {
+            'x-rapidapi-key': RAPIDAPI_KEY,
+            'x-rapidapi-host': 'tiktok-video-no-watermark2.p.rapidapi.com',
+            'Content-Type': 'application/json'
+        },
+    };
+
+    const apiResponse = await axios.request(options);
+    
+    
+    if (!apiResponse.data || apiResponse.statusText !== 'OK') {
+        throw new Error('Invalid API response');
+    }
+
+    const downloadUrl = apiResponse.data.data.play;
+    const extension = 'mp4';
+    const title = apiResponse.data.data.title ? apiResponse.data.data.title : `${new Date().getTime()}`;
+
+    if (!downloadUrl) {
+        throw new Error('No downloadable content found');
+    }
+    
+    
+
+    return { downloadUrl, title, extension };
+}
+
 export const handleDownloadCommand = async (bot: TelegramBot, chatId: number): Promise<void> => {
     const sentMessage = await bot.sendMessage(chatId, 'Please send the URL of the video you want to download.', {
         reply_markup: {
@@ -441,6 +488,22 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
         try {
             if (url.includes('instagram.com')) {
                 const { downloadUrl, title, extension } = await getInstagramDownloadDetails(url);
+                const sanitizedTitle = title.replace(/[^a-zA-Z0-9]/g, '_');
+                const filePaths = await downloadAndProcessMedia(
+                    downloadUrl,
+                    `${sanitizedTitle}.${extension}`,
+                    '',
+                    extension === 'mp4' ? 'Video' : 'Image',
+                    FILE_SIZE_LIMIT_MB * 1048576,
+                    '',
+                    true
+                );
+
+                await sendMedia(bot, chatId, extension === 'mp4' ? 'Video' : 'Image', filePaths, true);
+                await bot.deleteMessage(chatId, processingMessage.message_id.toString());
+            } else if (url.includes('tiktok.com')){
+                
+                const { downloadUrl, title, extension } = await getTikTokDownloadDetails(url);
                 const sanitizedTitle = title.replace(/[^a-zA-Z0-9]/g, '_');
                 const filePaths = await downloadAndProcessMedia(
                     downloadUrl,
