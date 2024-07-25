@@ -127,7 +127,6 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
     }
 
     try {
-        console.log('fileLink:', fileLink);
         
         // Download the file from Telegram
         const response = await axios({
