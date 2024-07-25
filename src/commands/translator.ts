@@ -1,8 +1,9 @@
 import TelegramBot from 'node-telegram-bot-api';
+import axios from 'axios';
 import { languages } from '../utils/languages';
-import { translateText } from '../utils/translator';
 
 const userMessageMap = new Map<number, number[]>();
+const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 
 const addMessageToContext = (chatId: number, messageId: number) => {
     const messages = userMessageMap.get(chatId) || [];
@@ -28,7 +29,7 @@ export const handleTranslationCommand = async (bot: TelegramBot, callbackQuery: 
         await bot.editMessageText(`Tarjima tili ${language.flag} ${language.name} qilib o'rnatildi. Endi matnni kiriting:\n\n/setlanguage orqali tilni o'zgartirishingiz mumkin`, {
             chat_id: chatId,
             message_id: messageId,
-            reply_markup: { inline_keyboard: [],  } // Toza markup bilan
+            reply_markup: { inline_keyboard: [], } // Toza markup bilan
         });
     }
 };
@@ -105,3 +106,28 @@ const createLanguageOptions = (page: number = 1) => {
         }
     };
 };
+
+export async function translateText(text: string, targetLanguage: string): Promise<string> {
+    const options = {
+        method: 'POST',
+        url: 'https://deep-translate1.p.rapidapi.com/language/translate/v2',
+        headers: {
+            'x-rapidapi-key': RAPIDAPI_KEY,
+            'x-rapidapi-host': 'deep-translate1.p.rapidapi.com',
+            'Content-Type': 'application/json'
+        },
+        data: {
+            q: text,
+            source: 'auto',
+            target: targetLanguage
+        }
+    };
+
+    try {
+        const response = await axios.request(options);
+        return response.data.data.translations.translatedText;
+    } catch (error) {
+        console.error('Error translating text:', error);
+        throw new Error('Translation failed');
+    }
+}
