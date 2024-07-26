@@ -1,7 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import axios from 'axios';
 import { languages } from '../utils/languages';
-import { getUserLanguage } from '../utils/systemLangs';
+import { getUserLanguage, translateMessage } from '../utils/systemLangs';
 
 const userMessageMap = new Map<number, number[]>();
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
@@ -12,8 +12,8 @@ const addMessageToContext = (chatId: number, messageId: number) => {
     userMessageMap.set(chatId, messages);
 };
 
-export const setTranslationLanguage = async (bot: TelegramBot, chatId: number, userLangsMap: Map<number, { code: string, name: string, flag: string }>) => {
-    const sentMessage = await bot.sendMessage(chatId, 'Iltimos, qaysi tilga tarjima qilishni xohlaysiz?', createLanguageOptions());
+export const setTranslationLanguage = async (bot: TelegramBot, chatId: number,) => {
+    const sentMessage = await bot.sendMessage(chatId, translateMessage(chatId, 'What language would you like to translate into?'), createLanguageOptions());
     addMessageToContext(chatId, sentMessage.message_id);
 };
 
@@ -27,11 +27,15 @@ export const handleTranslationCommand = async (bot: TelegramBot, callbackQuery: 
 
     if (language) {
         userLangsMap.set(chatId, language);
-        await bot.editMessageText(`Tarjima tili ${language.flag} ${language.name} qilib o'rnatildi. Endi matnni kiriting:\n\n/setlanguage orqali tilni o'zgartirishingiz mumkin`, {
+        
+        await bot.editMessageText(translateMessage(chatId, `Translation language is set to {flag} {name}. Now you can change the language by typing:\n\n/setlanguage`, {
+            flag: language.flag,
+            name: language.name
+        }), {
             chat_id: chatId,
             message_id: messageId,
             reply_markup: { inline_keyboard: [], } // Toza markup bilan
-        });
+        })
     }
 };
 

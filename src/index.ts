@@ -56,7 +56,7 @@ bot.onText(/\/change_language/, async (msg) => {
         userContextMap.set(chatId, 'translate');
         await clearPreviousMessages(chatId, bot);
         await sendMessage(chatId, bot, 'You have selected the translation bot. Here you can translate texts.');
-        setTranslationLanguage(bot, chatId, userLanguageMap);
+        setTranslationLanguage(bot, chatId);
         }else{
             await bot.sendMessage(chatId, 'Invalid command. Please select a valid option.', mainMenuOptions(chatId));
         }
@@ -121,7 +121,7 @@ bot.onText(/\/setlanguage/, async (msg) => {
     const context = userContextMap.get(chatId);
     if (context === 'translate') {
         await clearPreviousMessages(chatId, bot);
-        await setTranslationLanguage(bot, chatId, userLanguageMap);
+        await setTranslationLanguage(bot, chatId);
     } else {
         await sendMessage(chatId, bot, 'Invalid command. This command only works in "Translation" mode.');
     }
@@ -159,7 +159,7 @@ bot.on('callback_query', async (callbackQuery) => {
                 }
             } else if (data === 'translate') {
                 userContextMap.set(chatId, 'translate');
-                setTranslationLanguage(bot, chatId, userLangsMap);
+                setTranslationLanguage(bot, chatId);
             } else if (data === 'download') {
                 userContextMap.set(chatId, 'save');
                 handleDownloadCommand(bot, chatId);

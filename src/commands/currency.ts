@@ -2,6 +2,7 @@ import TelegramBot from 'node-telegram-bot-api';
 import axios from 'axios';
 import * as dotenv from 'dotenv';
 import { currencies } from '../utils/currencies';
+import { getUserLanguage, translateMessage } from '../utils/systemLangs';
 
 dotenv.config();
 
@@ -54,7 +55,7 @@ export const createCurrencyOptions = (step: 'from' | 'to', page: number = 1) => 
 
 
 export const handleCurrencyCommand = async (bot: TelegramBot, chatId: number) => {
-    const sentMessage = await bot.sendMessage(chatId, 'Iltimos, qaysi valyutani kalkulyatsiya qilishni xohlaysiz?', createCurrencyOptions('from'));
+    const sentMessage = await bot.sendMessage(chatId, translateMessage(chatId, 'Which currency do you want to calculate?'), createCurrencyOptions('from'));
     addMessageToContext(chatId, sentMessage.message_id);
 };
 
@@ -67,7 +68,7 @@ export const handleCurrencySelection = async (bot: TelegramBot, callbackQuery: T
 
     if (step === 'from') {
         userCurrencyMap.set(chatId, { from: currencyCode, to: '' });
-        await bot.editMessageText(`Siz ${currencyCode} ${currencies.find(c => c.code === currencyCode)?.flag} valyutasini tanladingiz. Endi qaysi valyutaga kalkulyatsiya qilishni xohlaysiz?`, {
+        await bot.editMessageText(translateMessage(chatId, 'You have selected the currency {curr} {flag}. Which currency do you want to calculate now?', { curr: currencyCode, flag: currencies.find(c => c.code === currencyCode)?.flag }), {
             chat_id: chatId,
             message_id: messageId,
             reply_markup: createCurrencyOptions('to').reply_markup
@@ -77,7 +78,12 @@ export const handleCurrencySelection = async (bot: TelegramBot, callbackQuery: T
         if (userCurrencies) {
             userCurrencies.to = currencyCode;
             userCurrencyMap.set(chatId, userCurrencies);
-            await bot.editMessageText(`Siz ${userCurrencies.from} ${currencies.find(c => c.code === userCurrencies.from)?.flag} valyutasidan ${currencyCode} ${currencies.find(c => c.code === currencyCode)?.flag} valyutasiga kalkulyatsiya qilishni tanladingiz. Iltimos, miqdorni kiriting:\n\n/change_currency - valyutani o'zgartirish`, {
+            await bot.editMessageText(translateMessage(chatId, 'You have chosen to calculate from {curr_1} {flag_1} currency to {curr_2} {flag_2} currency. Please enter an amount:\n\n/change_currency - change currency', {
+                curr_1: userCurrencies.from,
+                flag_1: currencies.find(c => c.code === userCurrencies.from)?.flag,
+                curr_2: currencyCode,
+                flag_2: currencies.find(c => c.code === currencyCode)?.flag
+            }), {
                 chat_id: chatId,
                 message_id: messageId,
                 reply_markup: { inline_keyboard: [], } // Toza markup bilan
@@ -107,10 +113,10 @@ export const handleCurrencyConversion = async (bot: TelegramBot, msg: TelegramBo
         const amount = parseFloat(text);
 
         if (isNaN(amount)) {
-            const sentMessage = await bot.sendMessage(chatId, 'Iltimos, to\'g\'ri miqdorni kiriting:', {
+            const sentMessage = await bot.sendMessage(chatId, 'Please enter the correct amount:', {
                 reply_markup: {
                     keyboard: [
-                        [{ text: "Bot turini o'zgartirish" }]
+                        [{ text: getUserLanguage(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : getUserLanguage(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
                     ],
                     resize_keyboard: true,
                     one_time_keyboard: false
@@ -131,7 +137,7 @@ export const handleCurrencyConversion = async (bot: TelegramBot, msg: TelegramBo
             const sentMessage = await bot.sendMessage(chatId, `${amount} ${userCurrencies.from} ${currencies.find(c => c.code === userCurrencies.from)?.flag} = ${convertedAmount} ${userCurrencies.to} ${currencies.find(c => c.code === userCurrencies.to)?.flag}`, {
                 reply_markup: {
                     keyboard: [
-                        [{ text: "Bot turini o'zgartirish" }]
+                        [{ text: getUserLanguage(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : getUserLanguage(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
                     ],
                     resize_keyboard: true,
                     one_time_keyboard: false
@@ -140,7 +146,7 @@ export const handleCurrencyConversion = async (bot: TelegramBot, msg: TelegramBo
             });
             addMessageToContext(chatId, sentMessage.message_id);
         } catch (error) {
-            const sentMessage = await bot.sendMessage(chatId, 'Valyuta kurslarini olishda xatolik yuz berdi. Iltimos, keyinroq qayta urinib ko\'ring.', {
+            const sentMessage = await bot.sendMessage(chatId, translateMessage(chatId, 'An error occurred while retrieving exchange rates. Please try again later.'), {
                 reply_markup: {
                     keyboard: [
                         [{ text: "Bot turini o'zgartirish" }]
@@ -152,7 +158,7 @@ export const handleCurrencyConversion = async (bot: TelegramBot, msg: TelegramBo
             addMessageToContext(chatId, sentMessage.message_id);
         }
     } else {
-        const sentMessage = await bot.sendMessage(chatId, 'Iltimos, avval valyutalarni tanlang.');
+        const sentMessage = await bot.sendMessage(chatId, translateMessage(chatId, 'Please select currencies first.'));
         addMessageToContext(chatId, sentMessage.message_id);
     }
 };

@@ -478,7 +478,9 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
 
     if (url && url.startsWith("http")) {
         const processingMessage = await bot.sendMessage(chatId, translateMessage(chatId, 'Processing the URL, please wait..'), {
-            
+            reply_markup: {
+                remove_keyboard: true
+            }
         });
         addMessageToContext(chatId, processingMessage.message_id);
 
