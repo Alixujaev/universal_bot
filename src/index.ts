@@ -12,7 +12,9 @@ import { clearPreviousMessages, mainMenuOptions, sendMessage } from './utils/mai
 dotenv.config();
 const LOCAL_BOT_API_URL = process.env.LOCAL_BOT_API_URL || 'https://api.telegram.org/bot';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const APP_URL = process.env.APP_URL; // Heroku URL
 const PORT = process.env.PORT || 3000;
+
 export const bot = new TelegramBot(TELEGRAM_TOKEN, { 
     polling: false,
     baseApiUrl: LOCAL_BOT_API_URL
@@ -21,7 +23,7 @@ export const bot = new TelegramBot(TELEGRAM_TOKEN, {
 const app = express();
 app.use(bodyParser.json());
 
-bot.setWebHook(`${LOCAL_BOT_API_URL}/bot${TELEGRAM_TOKEN}`);
+bot.setWebHook(`${APP_URL}/bot${TELEGRAM_TOKEN}`);
 
 app.post(`/bot${TELEGRAM_TOKEN}`, (req, res) => {
     bot.processUpdate(req.body);
