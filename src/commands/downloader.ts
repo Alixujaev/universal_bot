@@ -5,6 +5,8 @@ import path from 'path';
 import * as dotenv from 'dotenv';
 import { exec } from 'child_process';
 import { HttpsProxyAgent } from 'https-proxy-agent';
+import { sendMessage } from '../utils/mainMenu';
+import { getUserLanguage, translateMessage } from '../utils/systemLangs';
 
 
 const proxyHost = '35.185.196.38'; // Tanlagan proxy serveringizning IP manzili
@@ -40,7 +42,6 @@ const addMessageToContext = (chatId: number, messageId: number): void => {
 };
 
 const downloadFile = async (url: string, output: string): Promise<void> => {
-    console.log('Tiktok url', url);
     
     const response = await axios({
         method: 'GET',
@@ -65,7 +66,6 @@ const downloadVideoAndAudio = async (videoUrl: string, audioUrl: string, videoOu
             downloadFile(videoUrl, videoOutput),
             downloadFile(audioUrl, audioOutput)
         ]);
-        console.log('Both video and audio files downloaded successfully');
     } catch (error) {
         console.error('Error downloading files', error);
         throw error;
@@ -151,10 +151,10 @@ const sendMedia = async (
         if (mediaType === 'Video') {
             if(instaVideo){
                 await bot.sendVideo(chatId, filePaths.outputPath, {
-                    caption: `@tg_multitask_bot 🤖`,
+                    caption: `@tg_multitask_bot`,
                     reply_markup: {
                         keyboard: [
-                            [{ text: "Bot turini o'zgartirish" }]
+                            [{ text: getUserLanguage(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : getUserLanguage(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
                         ],
                         resize_keyboard: true,
                         one_time_keyboard: false
@@ -162,10 +162,10 @@ const sendMedia = async (
                 });
             }else{
                 await bot.sendVideo(chatId, filePaths.mergedOutputPath, {
-                    caption: `@tg_multitask_bot 🤖`,
+                    caption: `@tg_multitask_bot`,
                     reply_markup: {
                         keyboard: [
-                            [{ text: "Bot turini o'zgartirish" }]
+                            [{ text: getUserLanguage(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : getUserLanguage(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
                         ],
                         resize_keyboard: true,
                         one_time_keyboard: false
@@ -175,10 +175,10 @@ const sendMedia = async (
             
         } else if (mediaType === 'Audio') {
             await bot.sendAudio(chatId, filePaths.outputPath, {
-                caption: `@tg_multitask_bot 🤖`,
+                caption: `@tg_multitask_bot`,
                 reply_markup: {
                     keyboard: [
-                        [{ text: "Bot turini o'zgartirish" }]
+                        [{ text: getUserLanguage(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : getUserLanguage(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
                     ],
                     resize_keyboard: true,
                     one_time_keyboard: false
@@ -186,10 +186,10 @@ const sendMedia = async (
             });
         } else if (mediaType === 'Image') {
             await bot.sendDocument(chatId, filePaths.photoOutputPath, {
-                caption: `@tg_multitask_bot 🤖`,
+                caption: `@tg_multitask_bot`,
                 reply_markup: {
                     keyboard: [
-                        [{ text: "Bot turini o'zgartirish" }]
+                        [{ text: getUserLanguage(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : getUserLanguage(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
                     ],
                     resize_keyboard: true,
                     one_time_keyboard: false
@@ -339,23 +339,23 @@ const sendPaginatedFormats = async (bot: TelegramBot, chatId: number, formats: a
         inlineKeyboard.push(paginationButtons);
     }
 
-    await bot.sendMessage(chatId, `📹${title}\n👤${channel}\n\n${
+    await sendMessage(chatId, bot, `📹${title}\n👤${channel}\n\n${
         paginatedFormats.filter(format => format.qualityLabel !== 'image').map(format => `✅ ${format.qualityLabel ? format.qualityLabel : format.quality} ${(format.size/1048576).toFixed(0)} MB`).join('\n')
-        + '\n\n' + 'Select a format ↓'
+        + '\n\n' + '↓ ↓ ↓'
     }`, {
         reply_markup: {
             inline_keyboard: inlineKeyboard
         },
         reply_to_message_id: msg.message_id
-    });
+    })
 };
 
 const handleError = async (bot: TelegramBot, chatId: number, errorMessage: string, processingMessageId?: number): Promise<void> => {
     console.error('Error:', errorMessage);
-    await bot.sendMessage(chatId, `Error: ${errorMessage}. Please try again.`, {
+    await sendMessage(chatId, bot, 'Error. Please try again.', {
         reply_markup: {
             keyboard: [
-                [{ text: "Bot turini o'zgartirish" }]
+                [{ text: getUserLanguage(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : getUserLanguage(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
             ],
             resize_keyboard: true,
             one_time_keyboard: false
@@ -461,16 +461,15 @@ const getTikTokDownloadDetails = async (url: string): Promise<{downloadUrl: stri
 }
 
 export const handleDownloadCommand = async (bot: TelegramBot, chatId: number): Promise<void> => {
-    const sentMessage = await bot.sendMessage(chatId, 'Please send the URL of the video you want to download.', {
+    await sendMessage(chatId, bot, 'Please send the URL of the video you want to download.', {
         reply_markup: {
             keyboard: [
-                [{ text: "Bot turini o'zgartirish" }]
+                [{ text: getUserLanguage(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : getUserLanguage(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }],
             ],
             resize_keyboard: true,
             one_time_keyboard: false
         }
-    });
-    addMessageToContext(chatId, sentMessage.message_id);
+    })
 };
 
 export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message): Promise<void> => {
@@ -478,10 +477,8 @@ export const handleMediaUrl = async (bot: TelegramBot, msg: TelegramBot.Message)
     const url = msg.text;
 
     if (url && url.startsWith("http")) {
-        const processingMessage = await bot.sendMessage(chatId, 'Processing the URL, please wait...', {
-            reply_markup: {
-                remove_keyboard: true
-            }
+        const processingMessage = await bot.sendMessage(chatId, translateMessage(chatId, 'Processing the URL, please wait..'), {
+            
         });
         addMessageToContext(chatId, processingMessage.message_id);
 

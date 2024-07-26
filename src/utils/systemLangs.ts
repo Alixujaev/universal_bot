@@ -6,6 +6,7 @@ export const userLanguageMap = new Map<number, { code: string, name: string, fla
 export function translateToUzbek (text: string) {
   const translations = {
       'Welcome to the universal bot! Please choose from the menu below:': 'Universal botga xush kelibsiz! Quyidagi menyudan tanlang:',
+      'Please choose from the menu below:': 'Quyidagi menyudan tanlang:',
       'You have selected the translation bot. Here you can translate texts.': 'Siz tarjima botini tanladingiz. Bu yerda siz textlarni tarjima qilishingiz mumkin.',
       'You have selected the downloader service.': 'Siz yuklovchi bot xizmatini tanladingiz',
       'You have selected the currency calculator.': 'Siz valyuta kalkulyatorini tanladingiz',
@@ -20,6 +21,9 @@ export function translateToUzbek (text: string) {
       'Invalid command. This command only works in "Translation" mode.': 'Noto‘g‘ri amal. Ushbu buyruq faqat "Tarjima" rejimida ishlaydi.',
       'Invalid command. Please select a valid option.': 'Noto‘g‘ri amal. Iltimos, to‘g‘ri variantni tanlang.',
       'What language would you like to translate into?': 'Qaysi tilga tarjima qilmoqchisiz?',
+      'Please send the URL of the video you want to download.': 'Foydalanish uchun videoni URL manzilini yuboring.',
+      'Error. Please try again.': 'Xato. Iltimos, qayta urunib ko‘ring.',
+      'Processing the URL, please wait..': 'URL yuklanmoqda, kuting...',
       // Add more translations here
   };
   return translations[text] || text;
@@ -28,13 +32,14 @@ export function translateToUzbek (text: string) {
 export function translateToRussian (text: string){
   const translations = {
       'Welcome to the universal bot! Please choose from the menu below:': 'Добро пожаловать в универсальный бот! Пожалуйста, выберите из меню ниже:',
+      'Please choose from the menu below:': 'Пожалуйста, выберите из меню ниже:',
       'You have selected the translation bot. Here you can translate texts.': 'Вы выбрали бота перевода. Здесь вы можете переводить тексты.',
       'You have selected the downloader service.': 'Вы выбрали службу загрузки.',
       'You have selected the currency calculator.': 'Вы выбрали калькулятор валют.',
       'You have selected the file conversion service.': 'Вы выбрали службу конвертации файлов.',
       'Please select your language:': 'Пожалуйста, выберите ваш язык:',
       'Translation': 'Перевод',
-      'Download': 'Загрузка',
+      'Download': 'Скачать',
       'Currency Calculator': 'Калькулятор валют',
       'File Conversion': 'Конвертация файлов',
       'Change bot type': 'Изменить тип бота',
@@ -42,6 +47,9 @@ export function translateToRussian (text: string){
       'Invalid command. This command only works in "Translation" mode.': 'Неверная команда. Эта команда работает только в режиме "Перевод".',
       'Invalid command. Please select a valid option.': 'Неверная команда. Пожалуйста, выберите допустимый вариант.',
       'What language would you like to translate into?': 'Какой язык вы хотите перевести в?',
+      'Please send the URL of the video you want to download.': 'Пожалуйста, отправьте URL видео, которое вы хотите загрузить.',
+      'Error. Please try again.': 'Ошибка. Пожалуйста, попробуйте ещё раз.',
+      'Processing the URL, please wait..': 'Обработка URL, пожалуйста, подождите..',
       // Add more translations here
   };
   return translations[text] || text;
@@ -56,7 +64,7 @@ export const languageOptions = [
 
 
 export const selectLanguage = async (chatId: number, bot: TelegramBot) => {
-  const options = languageOptions.map(lang => ({ text: `${lang.flag} ${lang.name}`, callback_data: `lang_${lang.code}` }));
+  const options = languageOptions.map(lang => ({ text: `${lang.flag} ${lang.name}`, callback_data: `start_lang_${lang.code}` }));
   const languageKeyboard = {
       reply_markup: {
           inline_keyboard: [options]

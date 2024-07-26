@@ -1,6 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import axios from 'axios';
 import { languages } from '../utils/languages';
+import { getUserLanguage } from '../utils/systemLangs';
 
 const userMessageMap = new Map<number, number[]>();
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
@@ -11,12 +12,12 @@ const addMessageToContext = (chatId: number, messageId: number) => {
     userMessageMap.set(chatId, messages);
 };
 
-export const setTranslationLanguage = async (bot: TelegramBot, chatId: number, userLanguageMap: Map<number, { code: string, name: string, flag: string }>) => {
+export const setTranslationLanguage = async (bot: TelegramBot, chatId: number, userLangsMap: Map<number, { code: string, name: string, flag: string }>) => {
     const sentMessage = await bot.sendMessage(chatId, 'Iltimos, qaysi tilga tarjima qilishni xohlaysiz?', createLanguageOptions());
     addMessageToContext(chatId, sentMessage.message_id);
 };
 
-export const handleTranslationCommand = async (bot: TelegramBot, callbackQuery: TelegramBot.CallbackQuery, data: string, userLanguageMap: Map<number, { code: string, name: string, flag: string }>) => {
+export const handleTranslationCommand = async (bot: TelegramBot, callbackQuery: TelegramBot.CallbackQuery, data: string, userLangsMap: Map<number, { code: string, name: string, flag: string }>) => {
     const chatId = callbackQuery.message?.chat.id;
     const messageId = callbackQuery.message?.message_id;
     const langCode = data.split('_')[1];
@@ -25,7 +26,7 @@ export const handleTranslationCommand = async (bot: TelegramBot, callbackQuery: 
     if (!chatId || !messageId) return;
 
     if (language) {
-        userLanguageMap.set(chatId, language);
+        userLangsMap.set(chatId, language);
         await bot.editMessageText(`Tarjima tili ${language.flag} ${language.name} qilib o'rnatildi. Endi matnni kiriting:\n\n/setlanguage orqali tilni o'zgartirishingiz mumkin`, {
             chat_id: chatId,
             message_id: messageId,
@@ -34,12 +35,13 @@ export const handleTranslationCommand = async (bot: TelegramBot, callbackQuery: 
     }
 };
 
-export const handleTextMessage = async (bot: TelegramBot, msg: TelegramBot.Message, userLanguageMap: Map<number, { code: string, name: string, flag: string }>) => {
+export const handleTextMessage = async (bot: TelegramBot, msg: TelegramBot.Message, userLangsMap: Map<number, { code: string, name: string, flag: string }>) => {
     const chatId = msg.chat.id;
     const text = msg.text;
+    
 
     if (text && !text.startsWith('/')) {
-        const targetLanguage = userLanguageMap.get(chatId);
+        const targetLanguage = userLangsMap.get(chatId);
 
         if (targetLanguage) {
             try {
@@ -48,7 +50,7 @@ export const handleTextMessage = async (bot: TelegramBot, msg: TelegramBot.Messa
                 const sentMessage = await bot.sendMessage(chatId, `${translatedText}`, {
                     reply_markup: {
                         keyboard: [
-                            [{ text: "Bot turini o'zgartirish" }]
+                            [{ text: getUserLanguage(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : getUserLanguage(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
                         ],
                         resize_keyboard: true,
                         one_time_keyboard: false
@@ -60,7 +62,7 @@ export const handleTextMessage = async (bot: TelegramBot, msg: TelegramBot.Messa
                 const sentMessage = await bot.sendMessage(chatId, error.message, {
                     reply_markup: {
                         keyboard: [
-                            [{ text: "Bot turini o'zgartirish" }]
+                            [{ text: getUserLanguage(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : getUserLanguage(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
                         ],
                         resize_keyboard: true,
                         one_time_keyboard: false
@@ -108,6 +110,8 @@ const createLanguageOptions = (page: number = 1) => {
 };
 
 export async function translateText(text: string, targetLanguage: string): Promise<string> {
+    console.log(`Translating text: ${text} to ${targetLanguage}`);
+    
     const options = {
         method: 'POST',
         url: 'https://deep-translate1.p.rapidapi.com/language/translate/v2',

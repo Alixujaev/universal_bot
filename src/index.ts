@@ -17,9 +17,10 @@ export const bot = new TelegramBot(TELEGRAM_TOKEN, {
  });
 
 const userContextMap = new Map<number, string>();
+const userLangsMap = new Map<number, { code: string, name: string, flag: string }>();
 
 // Har bir buyrug'ni dinamik ravishda aniqlash
-const commands = ['Change bot type', 'Translation', 'Download', 'Currency Calculator', 'File Conversion'];
+const commands = ['Change bot type', 'Translation', 'Download', 'Currency Calculator', 'File Conversion', 'Изменить режим работы бота'];
 
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
@@ -34,13 +35,14 @@ bot.onText(/\/change_language/, async (msg) => {
     await selectLanguage(chatId, bot);
 });
 
-['Bot turini o\'zgartirish', 'Change bot type', 'Изменить тип бота'].forEach(command => {
+['Bot turini o\'zgartirish', 'Change bot type', 'Изменить режим работы бота'].forEach(command => {
     bot.onText(new RegExp(`^${command}$`), async (msg) => {
         const chatId = msg.chat.id;
-        if((command === 'Bot turini o\'zgartirish' && getUserLanguage(chatId) === 'uz') || (command === 'Change bot type' && getUserLanguage(chatId) === 'en') || (command === 'Изменить тип бота' && getUserLanguage(chatId) === 'ru')) {
+        if((command === 'Bot turini o\'zgartirish' && getUserLanguage(chatId) === 'uz') || (command === 'Change bot type' && getUserLanguage(chatId) === 'en') || (command === 'Изменить режим работы бота' && getUserLanguage(chatId) === 'ru')) {
             userContextMap.set(chatId, 'main');
             await clearPreviousMessages(chatId, bot);
-            await selectLanguage(chatId, bot);
+            // await selectLanguage(chatId, bot);
+            sendMessage(chatId, bot, 'Please choose from the menu below:', mainMenuOptions(chatId));
         }else{
             await bot.sendMessage(chatId, 'Invalid command. Please select a valid option.', mainMenuOptions(chatId));
         }
@@ -134,8 +136,8 @@ bot.on('callback_query', async (callbackQuery) => {
 
         await clearPreviousMessages(chatId, bot);
 
-        if (data.startsWith('lang_')) {
-            const selectedLang = languageOptions.find(lang => `lang_${lang.code}` === data);
+        if (data.startsWith('start_lang_')) {
+            const selectedLang = languageOptions.find(lang => `start_lang_${lang.code}` === data);
             if (selectedLang) {
                 userLanguageMap.set(chatId, selectedLang);
                 await sendMessage(chatId, bot, 'Welcome to the universal bot! Please choose from the menu below:', mainMenuOptions(chatId,));
@@ -157,12 +159,12 @@ bot.on('callback_query', async (callbackQuery) => {
                 }
             } else if (data === 'translate') {
                 userContextMap.set(chatId, 'translate');
-                setTranslationLanguage(bot, chatId, userLanguageMap);
+                setTranslationLanguage(bot, chatId, userLangsMap);
             } else if (data === 'download') {
                 userContextMap.set(chatId, 'save');
                 handleDownloadCommand(bot, chatId);
             } else if (data.startsWith('lang_')) {
-                await handleTranslationCommand(bot, callbackQuery, data, userLanguageMap);
+                await handleTranslationCommand(bot, callbackQuery, data, userLangsMap);
             } else if (data.startsWith('convert_')) {
                 await handleFileConversion(bot, callbackQuery);
             }
@@ -178,7 +180,7 @@ bot.on('message', async (msg) => {
         await clearPreviousMessages(chatId, bot);
 
         if (context === 'translate') {
-            handleTextMessage(bot, msg, userLanguageMap);
+            handleTextMessage(bot, msg, userLangsMap);
         } else if (context === 'save') {
             handleMediaUrl(bot, msg);
         } else if (context === 'currency') {
