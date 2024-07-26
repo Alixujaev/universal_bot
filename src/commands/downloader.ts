@@ -4,18 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import * as dotenv from 'dotenv';
 import { exec } from 'child_process';
-import { HttpsProxyAgent } from 'https-proxy-agent';
 import { sendMessage } from '../utils/mainMenu';
 import { getUserLanguage, translateMessage } from '../utils/systemLangs';
-
-
-const proxyHost = '35.185.196.38'; // Tanlagan proxy serveringizning IP manzili
-const proxyPort = '3128'; // Tanlagan proxy serveringizning porti
-
-const proxyUrl = `http://${proxyHost}:${proxyPort}`;
-
-const agent = new HttpsProxyAgent(proxyUrl);
-
 
 const ffmpegPath = 'C:\\ffmpeg\\ffmpeg-7.0.1-essentials_build\\bin\\ffmpeg.exe';
 dotenv.config();
@@ -23,7 +13,7 @@ dotenv.config();
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 const FILE_SIZE_LIMIT_MB = 2000;  // Telegram file size limit
 const MAX_RETRIES = 3;  // Retry limit
-const TIMEOUT = 10000;  // 10 seconds timeout
+const TIMEOUT = 10000;  // 10 seconds timeout       
 
 if (!RAPIDAPI_KEY) {
     throw new Error('RAPIDAPI_KEY is not defined in environment variables');
