@@ -1,6 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
 import * as dotenv from 'dotenv';
-
+import express from 'express';
+import bodyParser from 'body-parser';
 import { handleCurrencyCommand, handleCurrencySelection, handleCurrencyConversion, handleCurrencyPagination, handleChangeCurrency } from './commands/currency';
 import { handleTranslationCommand, setTranslationLanguage, handleTextMessage } from './commands/translator';
 import { handleConvertCommand, handleFileConversion, handleDocumentMessage, handleVideoMessage } from './commands/converter';
@@ -11,10 +12,21 @@ import { clearPreviousMessages, mainMenuOptions, sendMessage } from './utils/mai
 dotenv.config();
 const LOCAL_BOT_API_URL = process.env.LOCAL_BOT_API_URL || 'https://api.telegram.org/bot';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const PORT = process.env.PORT || 3000;
 export const bot = new TelegramBot(TELEGRAM_TOKEN, { 
     polling: false,
     baseApiUrl: LOCAL_BOT_API_URL
  });
+
+const app = express();
+app.use(bodyParser.json());
+
+bot.setWebHook(`${LOCAL_BOT_API_URL}/bot${TELEGRAM_TOKEN}`);
+
+app.post(`/bot${TELEGRAM_TOKEN}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+  });
 
 const userContextMap = new Map<number, string>();
 const userLangsMap = new Map<number, { code: string, name: string, flag: string }>();
@@ -208,3 +220,7 @@ bot.on('message', async (msg) => {
         await handleVideoMessage(bot, msg);
     }
 });
+
+app.listen(PORT, () => {
+    console.log(`Bot is listening on port ${PORT}`);
+  });
