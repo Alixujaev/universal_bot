@@ -12,7 +12,7 @@ dotenv.config();
 const LOCAL_BOT_API_URL = process.env.LOCAL_BOT_API_URL || 'https://api.telegram.org/bot';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 export const bot = new TelegramBot(TELEGRAM_TOKEN, { 
-    polling: true,
+    polling: false,
     baseApiUrl: LOCAL_BOT_API_URL
  });
 
