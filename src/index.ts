@@ -77,6 +77,8 @@ bot.onText(/\/start/, async (msg) => {
 // Change language command
 bot.onText(/\/change_language/, async (msg) => {
     const chatId = msg.chat.id;
+    console.log(userContextMap.get(chatId));
+    
     await clearPreviousMessages(chatId, bot);
     await selectLanguage(chatId, bot);
 });
@@ -125,6 +127,7 @@ handleGeneralCommands(Commands.CONVERT, 'convert', async (chatId: number) => {
 // Handle specific commands with parameters
 bot.onText(/\/change_currency/, async (msg) => {
     const chatId = msg.chat.id;
+    
     if (userContextMap.get(chatId) === 'currency') {
         await clearPreviousMessages(chatId, bot);
         await handleChangeCurrency(bot, msg);
@@ -162,6 +165,7 @@ bot.on('callback_query', async (callbackQuery) => {
         } else if (data.startsWith('from_')) {
             if (data.includes('page_')) {
                 const page = parseInt(data.split('page_')[1], 10);
+                userContextMap.set(chatId, 'currency');
                 await handleCurrencyPagination(bot, callbackQuery, 'from', page);
             } else {
                 await handleCurrencySelection(bot, callbackQuery, data, 'from');
@@ -169,8 +173,12 @@ bot.on('callback_query', async (callbackQuery) => {
         } else if (data.startsWith('to_')) {
             if (data.includes('page_')) {
                 const page = parseInt(data.split('page_')[1], 10);
+                userContextMap.set(chatId, 'currency');
+
                 await handleCurrencyPagination(bot, callbackQuery, 'to', page);
             } else {
+                userContextMap.set(chatId, 'currency');
+
                 await handleCurrencySelection(bot, callbackQuery, data, 'to');
             }
         } else if (data === 'translate') {

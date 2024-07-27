@@ -105,7 +105,7 @@ export function translateToEnglish (text: string, variables: { [key: string]: st
     'An error occurred while retrieving exchange rates. Please try again later.': 'An error occurred while retrieving exchange rates. Please try again later.',
     'Please select currencies first.': 'Please select currencies first.',
     'You have selected the currency {curr} {flag}. Which currency do you want to calculate now?': 'You have selected the currency {curr} {flag}. Which currency do you want to calculate now?',
-    'You have chosen to calculate from {curr_1} {flag_1} currency to {curr_2} {flag_2} currency. Please enter an amount:\n\n/change_currency - change currency': 'You have chosen to calculate from {curr_1} {flag_1} currency to {curr_2} {flag_2} currency. Please enter an amount:\n\n/change_currency - change currency',
+    'You have chosen to calculate from {curr_1}! {flag_1}! currency to {curr_2}! {flag_2}! currency. Please enter an amount:\n\n/change_currency - change currency': 'You have chosen to calculate from !{curr_1} {flag_1}! currency to {curr_2}! {flag_2}! currency. Please enter an amount:\n\n/change_currency - change currency',
       // Add more translations here
   };
   let translatedText = translations[text] || text;
