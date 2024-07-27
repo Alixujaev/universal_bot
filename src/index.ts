@@ -1,7 +1,5 @@
 import TelegramBot from 'node-telegram-bot-api';
 import * as dotenv from 'dotenv';
-import express from 'express';
-import bodyParser from 'body-parser';
 import { 
     handleCurrencyCommand, handleCurrencySelection, handleCurrencyConversion, handleCurrencyPagination, handleChangeCurrency 
 } from './commands/currency';
@@ -26,7 +24,7 @@ dotenv.config();
 const LOCAL_BOT_API_URL = process.env.LOCAL_BOT_API_URL || 'https://api.telegram.org/bot';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const APP_URL = process.env.APP_URL; // Heroku URL
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;  
 
 export const bot = new TelegramBot(TELEGRAM_TOKEN, { 
     polling: true,
