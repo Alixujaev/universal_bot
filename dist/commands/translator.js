@@ -1,20 +1,26 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleTextMessage = exports.handleTranslationCommand = exports.setTranslationLanguage = void 0;
+exports.translateText = translateText;
+const axios_1 = __importDefault(require("axios"));
 const languages_1 = require("../utils/languages");
-const translator_1 = require("../utils/translator");
+const systemLangs_1 = require("../utils/systemLangs");
 const userMessageMap = new Map();
+const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 const addMessageToContext = (chatId, messageId) => {
     const messages = userMessageMap.get(chatId) || [];
     messages.push(messageId);
     userMessageMap.set(chatId, messages);
 };
-const setTranslationLanguage = async (bot, chatId, userLanguageMap) => {
-    const sentMessage = await bot.sendMessage(chatId, 'Iltimos, qaysi tilga tarjima qilishni xohlaysiz?', createLanguageOptions());
+const setTranslationLanguage = async (bot, chatId) => {
+    const sentMessage = await bot.sendMessage(chatId, (0, systemLangs_1.translateMessage)(chatId, 'What language would you like to translate into?'), createLanguageOptions());
     addMessageToContext(chatId, sentMessage.message_id);
 };
 exports.setTranslationLanguage = setTranslationLanguage;
-const handleTranslationCommand = async (bot, callbackQuery, data, userLanguageMap) => {
+const handleTranslationCommand = async (bot, callbackQuery, data, userLangsMap) => {
     const chatId = callbackQuery.message?.chat.id;
     const messageId = callbackQuery.message?.message_id;
     const langCode = data.split('_')[1];
@@ -22,8 +28,11 @@ const handleTranslationCommand = async (bot, callbackQuery, data, userLanguageMa
     if (!chatId || !messageId)
         return;
     if (language) {
-        userLanguageMap.set(chatId, language);
-        await bot.editMessageText(`Tarjima tili ${language.flag} ${language.name} qilib o'rnatildi. Endi matnni kiriting:\n\n/setlanguage orqali tilni o'zgartirishingiz mumkin`, {
+        userLangsMap.set(chatId, language);
+        await bot.editMessageText((0, systemLangs_1.translateMessage)(chatId, `Translation language is set to {flag} {name}. Now you can change the language by typing:\n\n/setlanguage`, {
+            flag: language.flag,
+            name: language.name
+        }), {
             chat_id: chatId,
             message_id: messageId,
             reply_markup: { inline_keyboard: [], } // Toza markup bilan
@@ -31,19 +40,19 @@ const handleTranslationCommand = async (bot, callbackQuery, data, userLanguageMa
     }
 };
 exports.handleTranslationCommand = handleTranslationCommand;
-const handleTextMessage = async (bot, msg, userLanguageMap) => {
+const handleTextMessage = async (bot, msg, userLangsMap) => {
     const chatId = msg.chat.id;
     const text = msg.text;
     if (text && !text.startsWith('/')) {
-        const targetLanguage = userLanguageMap.get(chatId);
+        const targetLanguage = userLangsMap.get(chatId);
         if (targetLanguage) {
             try {
                 bot.sendChatAction(chatId, 'typing');
-                const translatedText = await (0, translator_1.translateText)(text, targetLanguage.code);
+                const translatedText = await translateText(text, targetLanguage.code);
                 const sentMessage = await bot.sendMessage(chatId, `${translatedText}`, {
                     reply_markup: {
                         keyboard: [
-                            [{ text: "Bot turini o'zgartirish" }]
+                            [{ text: (0, systemLangs_1.getUserLanguage)(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : (0, systemLangs_1.getUserLanguage)(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
                         ],
                         resize_keyboard: true,
                         one_time_keyboard: false
@@ -56,7 +65,7 @@ const handleTextMessage = async (bot, msg, userLanguageMap) => {
                 const sentMessage = await bot.sendMessage(chatId, error.message, {
                     reply_markup: {
                         keyboard: [
-                            [{ text: "Bot turini o'zgartirish" }]
+                            [{ text: (0, systemLangs_1.getUserLanguage)(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : (0, systemLangs_1.getUserLanguage)(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
                         ],
                         resize_keyboard: true,
                         one_time_keyboard: false
@@ -100,4 +109,29 @@ const createLanguageOptions = (page = 1) => {
         }
     };
 };
+async function translateText(text, targetLanguage) {
+    console.log(`Translating text: ${text} to ${targetLanguage}`);
+    const options = {
+        method: 'POST',
+        url: 'https://deep-translate1.p.rapidapi.com/language/translate/v2',
+        headers: {
+            'x-rapidapi-key': RAPIDAPI_KEY,
+            'x-rapidapi-host': 'deep-translate1.p.rapidapi.com',
+            'Content-Type': 'application/json'
+        },
+        data: {
+            q: text,
+            source: 'auto',
+            target: targetLanguage
+        }
+    };
+    try {
+        const response = await axios_1.default.request(options);
+        return response.data.data.translations.translatedText;
+    }
+    catch (error) {
+        console.error('Error translating text:', error);
+        throw new Error('Translation failed');
+    }
+}
 //# sourceMappingURL=translator.js.map

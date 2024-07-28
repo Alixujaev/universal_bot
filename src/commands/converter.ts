@@ -57,10 +57,6 @@ const uploadFileToZamzar = async (filePath: string, targetFormat: string) => {
         formData.append('source_file', fs.createReadStream(filePath));
         formData.append('target_format', targetFormat);
 
-        console.log('source_file:', filePath);
-        console.log('target_format:', targetFormat);
-        
-
         const response = await axios.post(`${ZAMZAR_API_URL}/jobs`, formData, {
             auth: {
                 username: ZAMZAR_API_KEY,
@@ -99,6 +95,29 @@ const downloadConvertedFile = async (fileUrl: string, outputPath: string) => {
     }
 };
 
+const downloadFile = async (fileUrl, outputPath) => {
+    // Asosiy URL qismini ajratib olish
+    const urlPath = fileUrl.replace('http://localhost:8081/file/bot', '');
+
+    // Mahalliy manzilni yaratish
+    const localPath = path.join('C:\\Users\\user\\Desktop\\my\\universal', urlPath);
+
+    console.log(`Downloading file from ${localPath} to ${outputPath}`);
+    
+    try {
+        const response = await axios.get(`${localPath}`, { responseType: 'stream' });
+
+        return new Promise((resolve, reject) => {
+            const stream = response.data.pipe(fs.createWriteStream(outputPath));
+            stream.on('finish', () => resolve(outputPath));
+            stream.on('error', reject);
+        });
+    } catch (error) {
+        console.error(`Error downloading file:`, error.message);
+        throw error;
+    }
+};
+
 export const handleFileConversion = async (bot: TelegramBot, callbackQuery: TelegramBot.CallbackQuery) => {
     const chatId = callbackQuery.message?.chat.id;
     const data = callbackQuery.data;
@@ -111,42 +130,17 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
 
     const { fileId, fileName, fileType } = fileInfo;
 
-    const fileLink = await bot.getFileLink(fileId);
-    const filePath = path.join(__dirname, 'tmp', fileName);
-    const processingMessage = await bot.sendMessage(chatId, 'Processing the file, please wait...', {
-        reply_markup: {
-            remove_keyboard: true
-        },
-        reply_to_message_id: callbackQuery.message?.message_id
-    });
-    addMessageToContext(chatId, processingMessage.message_id);
-
-    // Ensure the tmp directory exists
-    if (!fs.existsSync(path.dirname(filePath))) {
-        fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    }
-
     try {
+        const fileLink = await bot.getFileLink(fileId);
+
+        const urlPath = fileLink.replace('http://localhost:8081/file/bot', '');
+        const formattedUrlPath = urlPath.replace(/:/g, '~');
+        const localPath = path.join('C:\\Users\\user\\Desktop\\my\\universal', formattedUrlPath);
         
-        // Download the file from Telegram
-        const response = await axios({
-            method: 'GET',
-            url: fileLink,
-            responseType: 'stream'
-        });
-        const fileStream = fs.createWriteStream(filePath);
-        response.data.pipe(fileStream);
-
-        await new Promise((resolve, reject) => {
-            fileStream.on('finish', resolve);
-            fileStream.on('error', reject);
-        });
-
-        const uploadResponse = await uploadFileToZamzar(filePath, targetFormat);
+        const uploadResponse = await uploadFileToZamzar(localPath, targetFormat);
         const jobId = uploadResponse.id;
         let jobResponse;
 
-        // Polling the job status
         let jobStatus = uploadResponse.status;
         while (jobStatus !== 'successful') {
             jobResponse = await axios.get(`${ZAMZAR_API_URL}/jobs/${jobId}`, {
@@ -156,7 +150,7 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
                 }
             });
             jobStatus = jobResponse.data.status;
-            await new Promise(resolve => setTimeout(resolve, 5000)); // 5 seconds delay
+            await new Promise(resolve => setTimeout(resolve, 5000));
         }
 
         const fileIdConverted = jobResponse.data.target_files[0].id;
@@ -178,7 +172,6 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
             reply_to_message_id: callbackQuery.message?.message_id
         });
 
-        // Delete the file from the server
         fs.unlink(outputPath, (err) => {
             if (err) console.error(`Failed to delete file: ${outputPath}`, err);
             else console.log(`Deleted file: ${outputPath}`);
@@ -209,12 +202,11 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
             });
         }
     } finally {
-        // Delete the original file from the server
+        const filePath = path.join(__dirname, 'tmp', fileName);
         fs.unlink(filePath, (err) => {
             if (err) console.error(`Failed to delete file: ${filePath}`, err);
             else console.log(`Deleted file: ${filePath}`);
         });
-        await bot.deleteMessage(chatId, processingMessage.message_id.toString());
     }
 };
 

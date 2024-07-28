@@ -31,11 +31,15 @@ const axios_1 = __importDefault(require("axios"));
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const dotenv = __importStar(require("dotenv"));
+const child_process_1 = require("child_process");
+const mainMenu_1 = require("../utils/mainMenu");
+const systemLangs_1 = require("../utils/systemLangs");
+const ffmpegPath = 'C:\\ffmpeg\\ffmpeg-7.0.1-essentials_build\\bin\\ffmpeg.exe';
 dotenv.config();
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
-const FILE_SIZE_LIMIT_MB = 50; // Telegram file size limit
+const FILE_SIZE_LIMIT_MB = 2000; // Telegram file size limit
 const MAX_RETRIES = 3; // Retry limit
-const TIMEOUT = 10000; // 10 seconds timeout
+const TIMEOUT = 10000; // 10 seconds timeout       
 if (!RAPIDAPI_KEY) {
     throw new Error('RAPIDAPI_KEY is not defined in environment variables');
 }
@@ -45,21 +49,7 @@ const addMessageToContext = (chatId, messageId) => {
     messages.push(messageId);
     userMessageMap[chatId] = messages;
 };
-const handleDownloadCommand = async (bot, chatId) => {
-    const sentMessage = await bot.sendMessage(chatId, 'Please send the URL of the video or image you want to download.', {
-        reply_markup: {
-            keyboard: [
-                [{ text: "Bot turini o'zgartirish" }]
-            ],
-            resize_keyboard: true,
-            one_time_keyboard: false
-        }
-    });
-    addMessageToContext(chatId, sentMessage.message_id);
-};
-exports.handleDownloadCommand = handleDownloadCommand;
-const downloadVideo = async (url, output) => {
-    console.log(`Downloading video: ${url} to ${output}`);
+const downloadFile = async (url, output) => {
     const response = await (0, axios_1.default)({
         method: 'GET',
         url: url,
@@ -67,31 +57,162 @@ const downloadVideo = async (url, output) => {
         timeout: TIMEOUT
     });
     return new Promise((resolve, reject) => {
-        console.log(`Downloading video: ${url} to ${output}`);
         const stream = response.data.pipe(fs_1.default.createWriteStream(output));
         stream.on('finish', () => resolve());
         stream.on('error', (error) => {
-            console.error(`Error downloading video: ${error.message}`);
+            console.error(`Error downloading file: ${error.message}`);
             reject(error);
         });
     });
 };
-const downloadAudio = async (url, output) => {
-    const response = await (0, axios_1.default)({
-        method: 'GET',
-        url: url,
-        responseType: 'arraybuffer',
-        timeout: TIMEOUT
-    });
-    await fs_1.default.promises.writeFile(output, response.data);
+const downloadVideoAndAudio = async (videoUrl, audioUrl, videoOutput, audioOutput) => {
+    try {
+        await Promise.all([
+            downloadFile(videoUrl, videoOutput),
+            downloadFile(audioUrl, audioOutput)
+        ]);
+    }
+    catch (error) {
+        console.error('Error downloading files', error);
+        throw error;
+    }
 };
-const getFileSizeInMB = (filePath) => {
-    const stats = fs_1.default.statSync(filePath);
-    return stats.size / (1024 * 1024); // Convert to MB
+const mergeVideoAndAudio = (videoPath, audioPath, outputPath) => {
+    return new Promise((resolve, reject) => {
+        const ffmpegCommand = `${ffmpegPath} -i "${videoPath}" -i "${audioPath}" -c:v copy -c:a aac "${outputPath}"`;
+        (0, child_process_1.exec)(ffmpegCommand, (error, stdout, stderr) => {
+            if (error) {
+                console.error(`ffmpeg error: ${error.message}`);
+                reject(error);
+                return;
+            }
+            console.log(`ffmpeg output: ${stdout}`);
+            console.error(`ffmpeg stderr: ${stderr}`);
+            resolve();
+        });
+    });
+};
+const downloadAndProcessMedia = async (downloadUrl, outputFileName, audioOutputFileName, mediaType, size, audioUrl, instaVideo) => {
+    const output = path_1.default.resolve(__dirname, 'tmp', outputFileName);
+    const photoOutput = path_1.default.resolve(__dirname, 'tmp', `${outputFileName}.jpg`);
+    const audioOutput = path_1.default.resolve(__dirname, 'tmp', audioOutputFileName);
+    const mergedOutput = path_1.default.resolve(__dirname, 'tmp', `merged_${outputFileName}.mp4`);
+    if (size / 1048576 > FILE_SIZE_LIMIT_MB) {
+        throw new Error(`The ${mediaType.toLowerCase()} size is larger than ${FILE_SIZE_LIMIT_MB} MB.`);
+    }
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        try {
+            if (mediaType === 'Video') {
+                if (instaVideo) {
+                    await downloadFile(downloadUrl, output);
+                }
+                else {
+                    await downloadVideoAndAudio(downloadUrl, audioUrl, output, audioOutput);
+                    await mergeVideoAndAudio(output, audioOutput, mergedOutput);
+                }
+            }
+            else if (mediaType === 'Image') {
+                const imageUrl = typeof downloadUrl === 'string' ? downloadUrl : downloadUrl.url;
+                await downloadFile(imageUrl, photoOutput);
+            }
+            else {
+                await downloadFile(downloadUrl, output);
+            }
+            break;
+        }
+        catch (error) {
+            console.log('error:', error);
+            if (attempt < MAX_RETRIES - 1) {
+                console.warn(`Retrying download (${attempt + 1}/${MAX_RETRIES})...`);
+            }
+            else {
+                console.error(`Failed to download ${mediaType.toLowerCase()}: ${error.message}`);
+                throw error;
+            }
+        }
+    }
+    return { outputPath: output, audioOutputPath: audioOutput, mergedOutputPath: mergedOutput, photoOutputPath: photoOutput };
+};
+const sendMedia = async (bot, chatId, mediaType, filePaths, instaVideo) => {
+    await bot.sendChatAction(chatId, mediaType === 'Video' ? 'upload_video' : mediaType === 'Audio' ? 'upload_audio' : 'upload_photo');
+    try {
+        if (mediaType === 'Video') {
+            if (instaVideo) {
+                await bot.sendVideo(chatId, filePaths.outputPath, {
+                    caption: `@tg_multitask_bot`,
+                    reply_markup: {
+                        keyboard: [
+                            [{ text: (0, systemLangs_1.getUserLanguage)(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : (0, systemLangs_1.getUserLanguage)(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
+                        ],
+                        resize_keyboard: true,
+                        one_time_keyboard: false
+                    }
+                });
+            }
+            else {
+                await bot.sendVideo(chatId, filePaths.mergedOutputPath, {
+                    caption: `@tg_multitask_bot`,
+                    reply_markup: {
+                        keyboard: [
+                            [{ text: (0, systemLangs_1.getUserLanguage)(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : (0, systemLangs_1.getUserLanguage)(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
+                        ],
+                        resize_keyboard: true,
+                        one_time_keyboard: false
+                    }
+                });
+            }
+        }
+        else if (mediaType === 'Audio') {
+            await bot.sendAudio(chatId, filePaths.outputPath, {
+                caption: `@tg_multitask_bot`,
+                reply_markup: {
+                    keyboard: [
+                        [{ text: (0, systemLangs_1.getUserLanguage)(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : (0, systemLangs_1.getUserLanguage)(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
+                    ],
+                    resize_keyboard: true,
+                    one_time_keyboard: false
+                }
+            });
+        }
+        else if (mediaType === 'Image') {
+            await bot.sendDocument(chatId, filePaths.photoOutputPath, {
+                caption: `@tg_multitask_bot`,
+                reply_markup: {
+                    keyboard: [
+                        [{ text: (0, systemLangs_1.getUserLanguage)(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : (0, systemLangs_1.getUserLanguage)(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
+                    ],
+                    resize_keyboard: true,
+                    one_time_keyboard: false
+                }
+            });
+        }
+    }
+    catch (error) {
+        console.error(`Failed to send ${mediaType.toLowerCase()}: ${error.message}`);
+        throw error;
+    }
+    finally {
+        if (instaVideo) {
+            if (mediaType === 'Video') {
+                if (fs_1.default.existsSync(filePaths.outputPath))
+                    fs_1.default.unlinkSync(filePaths.outputPath); // Delete the file from the serve
+            }
+            else {
+                if (fs_1.default.existsSync(filePaths.photoOutputPath))
+                    fs_1.default.unlinkSync(filePaths.photoOutputPath); // Delete the file from the serve
+            }
+        }
+        else {
+            if (fs_1.default.existsSync(filePaths.outputPath))
+                fs_1.default.unlinkSync(filePaths.outputPath); // Delete the file from the server
+            if (mediaType === 'Video' && fs_1.default.existsSync(filePaths.audioOutputPath))
+                fs_1.default.unlinkSync(filePaths.audioOutputPath); // Delete the audio file from the server
+            if (mediaType === 'Video' && fs_1.default.existsSync(filePaths.mergedOutputPath))
+                fs_1.default.unlinkSync(filePaths.mergedOutputPath); // Delete the merged file from the server
+        }
+    }
 };
 const fetchFromApi = async (params, apiUrl, host, retries = MAX_RETRIES) => {
-    console.log(`Fetching from API: ${apiUrl}`);
-    console.log(`Params: ${JSON.stringify(params)}`);
     for (let attempt = 0; attempt < retries; attempt++) {
         try {
             console.log(`Attempt ${attempt + 1} to fetch from ${apiUrl}`);
@@ -109,7 +230,6 @@ const fetchFromApi = async (params, apiUrl, host, retries = MAX_RETRIES) => {
             if (response.status === 429) {
                 throw new Error('API rate limit exceeded');
             }
-            console.log(`Response received: ${response.status}`);
             return response;
         }
         catch (error) {
@@ -126,229 +246,94 @@ const fetchFromApi = async (params, apiUrl, host, retries = MAX_RETRIES) => {
         }
     }
 };
-const handleMediaUrl = async (bot, msg) => {
-    const chatId = msg.chat.id;
-    const url = msg.text;
-    if (url && url.startsWith("http")) {
-        const processingMessage = await bot.sendMessage(chatId, 'Processing the URL, please wait...', {
-            reply_markup: {
-                remove_keyboard: true
-            }
-        });
-        addMessageToContext(chatId, processingMessage.message_id);
-        try {
-            const { downloadUrl, title, isVideo } = await getDownloadDetails(url);
-            const sanitizedTitle = title.replace(/[^a-zA-Z0-9]/g, '_');
-            if (isVideo) {
-                await bot.sendMessage(chatId, 'Do you want the video or just the audio (MP3)?', {
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: 'Video', callback_data: 'video' },
-                                { text: 'Audio', callback_data: 'audio' }
-                            ]
-                        ],
-                    }
-                });
-                bot.once('callback_query', async (callbackQuery) => {
-                    const action = callbackQuery.data;
-                    const userId = callbackQuery.from.id;
-                    const replyMessageId = callbackQuery.message?.message_id;
-                    if (replyMessageId) {
-                        await bot.deleteMessage(userId, replyMessageId.toString());
-                    }
-                    try {
-                        if (action === 'video') {
-                            await processAndSendMedia(bot, chatId, downloadUrl, `${sanitizedTitle}.mp4`, 'upload_video', 'Video');
-                        }
-                        else if (action === 'audio') {
-                            await processAndSendMedia(bot, chatId, downloadUrl, `${sanitizedTitle}.mp3`, 'upload_audio', 'Audio');
-                        }
-                    }
-                    catch (error) {
-                        await handleError(bot, chatId, `Failed to process media: ${error.message}`);
-                    }
-                    await bot.deleteMessage(chatId, processingMessage.message_id.toString());
-                });
-            }
-        }
-        catch (error) {
-            await handleError(bot, chatId, error.message, processingMessage.message_id);
-        }
-    }
-    else {
-        bot.sendMessage(chatId, 'Invalid URL. Please enter a correct YouTube, Instagram, or TikTok URL.', {
-            reply_markup: {
-                keyboard: [
-                    [{ text: "Bot turini o'zgartirish" }]
-                ],
-                resize_keyboard: true,
-                one_time_keyboard: false
-            },
-            reply_to_message_id: msg.message_id
-        });
-    }
-};
-exports.handleMediaUrl = handleMediaUrl;
-const getDownloadDetails = async (url) => {
-    console.log("URL:", url);
-    if (url.includes("youtube.com") || url.includes("youtu.be")) {
-        return await getYouTubeDownloadDetails(url);
-    }
-    else if (url.includes("instagram.com")) {
-        return await getInstagramDownloadDetails(url);
-    }
-    else if (url.includes("tiktok.com")) {
-        return await getTikTokDownloadDetails(url);
-    }
-    else if (url.match(/\.(jpeg|jpg|gif|png)$/) != null) {
-        throw new Error('Invalid URL. Please enter a YouTube, Instagram, or TikTok URL.');
-    }
-    else {
-        throw new Error('Invalid URL. Please enter a correct URL.');
-    }
-};
 const getYouTubeDownloadDetails = async (url) => {
     const videoId = extractVideoId(url);
     if (!videoId) {
         throw new Error('Invalid YouTube URL. Please enter a correct URL.');
     }
-    const apiResponse = await fetchFromApi({ videoId: videoId }, 'https://youtube-media-downloader.p.rapidapi.com/v2/video/details', 'youtube-media-downloader.p.rapidapi.com');
-    if (!apiResponse.data.status || apiResponse.data.errorId !== 'Success') {
+    const apiResponse = await fetchFromApi({ id: videoId }, 'https://yt-api.p.rapidapi.com/dl', 'yt-api.p.rapidapi.com');
+    if (!apiResponse.data || apiResponse.data.status !== 'OK') {
         throw new Error('Invalid API response');
     }
-    const downloadUrl = apiResponse.data.videos.items[0].url;
     const title = apiResponse.data.title;
+    const channel = apiResponse.data.channelTitle;
+    const allFormats = [
+        ...apiResponse.data.formats.map((format) => ({
+            url: format?.url,
+            qualityLabel: format.qualityLabel,
+            quality: format.quality,
+            mimeType: format.mimeType,
+            size: format.contentLength
+        })),
+        ...apiResponse.data.adaptiveFormats.map((format) => ({
+            url: format?.url,
+            qualityLabel: format.qualityLabel,
+            quality: format.quality,
+            mimeType: format.mimeType,
+            size: format.contentLength
+        }))
+    ];
+    // Filter out duplicate quality formats
+    const uniqueFormats = allFormats.reduce((acc, current) => {
+        const x = acc.find(item => item.quality === current.quality);
+        if (!x) {
+            return acc.concat([current]);
+        }
+        else {
+            return acc;
+        }
+    }, []);
+    if (!allFormats.length) {
+        throw new Error('No available formats found');
+    }
     const isVideo = true;
-    if (!downloadUrl || !title) {
-        throw new Error('Invalid API response');
-    }
-    return { downloadUrl, title, isVideo };
+    return {
+        title,
+        channel,
+        isVideo,
+        formats: [
+            { ...allFormats.reverse()[0], qualityLabel: 'mp3' },
+            ...uniqueFormats.reverse(),
+            { url: apiResponse.data.thumbnail[apiResponse.data.thumbnail.length - 1], qualityLabel: 'image' }
+        ]
+    };
 };
-const getInstagramDownloadDetails = async (url) => {
-    const isStory = url.includes("/stories/");
-    const apiResponse = await fetchFromApi({ url }, 'https://instagram-downloader-download-instagram-videos-stories.p.rapidapi.com/index', 'instagram-downloader-download-instagram-videos-stories.p.rapidapi.com');
-    console.log("API response:", apiResponse);
-    if (!apiResponse.status || apiResponse.statusText !== 'OK') {
-        throw new Error('Invalid API response');
+const sendPaginatedFormats = async (bot, chatId, formats, title, channel, page, msg) => {
+    const itemsPerPage = 18;
+    const offset = (page - 1) * itemsPerPage;
+    const paginatedFormats = formats.slice(offset, offset + itemsPerPage);
+    const formatButtons = paginatedFormats.map((format, index) => ({
+        text: `${format.qualityLabel == 'mp3' ? '🔉' : format.qualityLabel == 'image' ? '🖼' : '📹'} ${format.qualityLabel == 'image' ? '' : format.qualityLabel ? format.qualityLabel : format.quality}`,
+        callback_data: `format_${offset + index}`
+    }));
+    const inlineKeyboard = [];
+    for (let i = 0; i < formatButtons.length; i += 3) {
+        inlineKeyboard.push(formatButtons.slice(i, i + 3));
     }
-    if (isStory) {
-        if (!apiResponse.data.result || !apiResponse.data.result.video_url) {
-            throw new Error('Invalid API response');
-        }
-        const downloadUrl = apiResponse.data.result.video_url;
-        const title = apiResponse.data.result.username || 'instagram_story';
-        const isVideo = true;
-        return { downloadUrl, title, isVideo };
+    const paginationButtons = [];
+    if (page > 1) {
+        paginationButtons.push({ text: '⬅️ Previous', callback_data: `page_${page - 1}` });
     }
-    else {
-        if (!apiResponse.data.media || !apiResponse.data.title) {
-            throw new Error('Invalid API response');
-        }
-        const downloadUrl = apiResponse.data.media;
-        const title = apiResponse.data.title || 'instagram_video';
-        const isVideo = true;
-        return { downloadUrl, title, isVideo };
+    if (offset + itemsPerPage < formats.length) {
+        paginationButtons.push({ text: 'Next ➡️', callback_data: `page_${page + 1}` });
     }
-};
-const getTikTokDownloadDetails = async (url) => {
-    console.log(`Getting TikTok download details for URL: ${url}`);
-    try {
-        const apiResponse = await fetchFromApi({ url: url, hd: '0' }, 'https://tiktok-download-without-watermark.p.rapidapi.com/analysis', 'tiktok-download-without-watermark.p.rapidapi.com');
-        console.log(`API Response: ${JSON.stringify(apiResponse.data)}`);
-        if (!apiResponse.data || apiResponse.data.code !== 0 || !apiResponse.data.data || !apiResponse.data.data.play) {
-            throw new Error('Invalid API response or no play URL found.');
-        }
-        const downloadUrl = apiResponse.data.data.play;
-        const title = apiResponse.data.data.title || 'tiktok_video';
-        const isVideo = true;
-        return { downloadUrl, title, isVideo };
+    if (paginationButtons.length > 0) {
+        inlineKeyboard.push(paginationButtons);
     }
-    catch (error) {
-        console.error('Error fetching TikTok download details:', error.message);
-        throw new Error('Failed to fetch TikTok video details. Please ensure the URL is correct and try again.');
-    }
-};
-const processAndSendMedia = async (bot, chatId, downloadUrl, outputFileName, action, mediaType) => {
-    const output = path_1.default.resolve(__dirname, outputFileName);
-    console.log('output:', output);
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        try {
-            console.log('mediaType:', mediaType);
-            console.log('downloadUrl:', downloadUrl);
-            if (mediaType === 'Video') {
-                await downloadVideo(downloadUrl, output);
-            }
-            else {
-                await downloadAudio(downloadUrl, output);
-            }
-            break;
-        }
-        catch (error) {
-            console.log('error:', error);
-            if (attempt < MAX_RETRIES - 1) {
-                console.warn(`Retrying download (${attempt + 1}/${MAX_RETRIES})...`);
-            }
-            else {
-                console.error(`Failed to download ${mediaType.toLowerCase()}: ${error.message}`);
-                throw error;
-            }
-        }
-    }
-    const fileSizeMB = getFileSizeInMB(output);
-    if (fileSizeMB > FILE_SIZE_LIMIT_MB) {
-        await bot.sendMessage(chatId, `The ${mediaType.toLowerCase()} size is larger than ${FILE_SIZE_LIMIT_MB} MB. Please upload another ${mediaType.toLowerCase()}.`, {
-            reply_markup: {
-                keyboard: [
-                    [{ text: "Bot turini o'zgartirish" }]
-                ],
-                resize_keyboard: true,
-                one_time_keyboard: false
-            }
-        });
-    }
-    else {
-        await bot.sendChatAction(chatId, action);
-        try {
-            if (mediaType === 'Video') {
-                await bot.sendVideo(chatId, output, {
-                    caption: `Video uploaded. @tg_multitask_bot`,
-                    reply_markup: {
-                        keyboard: [
-                            [{ text: "Bot turini o'zgartirish" }]
-                        ],
-                        resize_keyboard: true,
-                        one_time_keyboard: false
-                    }
-                });
-            }
-            else {
-                await bot.sendAudio(chatId, output, {
-                    caption: `Audio uploaded. @tg_multitask_bot`,
-                    reply_markup: {
-                        keyboard: [
-                            [{ text: "Bot turini o'zgartirish" }]
-                        ],
-                        resize_keyboard: true,
-                        one_time_keyboard: false
-                    }
-                });
-            }
-        }
-        catch (error) {
-            console.error(`Failed to send ${mediaType.toLowerCase()}: ${error.message}`);
-            throw error;
-        }
-        finally {
-            fs_1.default.unlinkSync(output); // Delete the file from the server
-        }
-    }
+    await (0, mainMenu_1.sendMessage)(chatId, bot, `📹${title}\n👤${channel}\n\n${paginatedFormats.filter(format => format.qualityLabel !== 'image').map(format => `✅ ${format.qualityLabel ? format.qualityLabel : format.quality} ${(format.size / 1048576).toFixed(0)} MB`).join('\n')
+        + '\n\n' + '↓ ↓ ↓'}`, {
+        reply_markup: {
+            inline_keyboard: inlineKeyboard
+        },
+        reply_to_message_id: msg.message_id
+    });
 };
 const handleError = async (bot, chatId, errorMessage, processingMessageId) => {
-    await bot.sendMessage(chatId, `Error: ${errorMessage}. Please try again.`, {
+    console.error('Error:', errorMessage);
+    await (0, mainMenu_1.sendMessage)(chatId, bot, 'Error. Please try again.', {
         reply_markup: {
             keyboard: [
-                [{ text: "Bot turini o'zgartirish" }]
+                [{ text: (0, systemLangs_1.getUserLanguage)(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : (0, systemLangs_1.getUserLanguage)(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
             ],
             resize_keyboard: true,
             one_time_keyboard: false
@@ -359,7 +344,6 @@ const handleError = async (bot, chatId, errorMessage, processingMessageId) => {
     }
 };
 const extractVideoId = (url) => {
-    console.log('URL:', url);
     try {
         const urlObj = new URL(url);
         console.log('urlObj:', urlObj);
@@ -393,4 +377,149 @@ const extractVideoId = (url) => {
         return null;
     }
 };
+const getInstagramDownloadDetails = async (url) => {
+    const options = {
+        method: 'POST',
+        url: 'https://auto-download-all-in-one.p.rapidapi.com/v1/social/autolink',
+        headers: {
+            'x-rapidapi-key': RAPIDAPI_KEY,
+            'x-rapidapi-host': 'auto-download-all-in-one.p.rapidapi.com',
+            'Content-Type': 'application/json'
+        },
+        data: {
+            url: url
+        }
+    };
+    const apiResponse = await axios_1.default.request(options);
+    if (!apiResponse.data || !apiResponse.data.medias || apiResponse.data.medias.length === 0) {
+        throw new Error('Invalid API response');
+    }
+    const downloadUrl = apiResponse.data.medias[0].url;
+    const extension = apiResponse.data.medias[0].extension;
+    const title = apiResponse.data.title;
+    if (!downloadUrl) {
+        throw new Error('No downloadable content found');
+    }
+    return { downloadUrl, title, extension };
+};
+const getTikTokDownloadDetails = async (url) => {
+    const options = {
+        method: 'GET',
+        url: 'https://tiktok-video-no-watermark2.p.rapidapi.com/',
+        params: { url: url },
+        headers: {
+            'x-rapidapi-key': RAPIDAPI_KEY,
+            'x-rapidapi-host': 'tiktok-video-no-watermark2.p.rapidapi.com',
+            'Content-Type': 'application/json'
+        },
+    };
+    const apiResponse = await axios_1.default.request(options);
+    if (!apiResponse.data || apiResponse.statusText !== 'OK') {
+        throw new Error('Invalid API response');
+    }
+    const downloadUrl = apiResponse.data.data.play;
+    const extension = 'mp4';
+    const title = apiResponse.data.data.title ? apiResponse.data.data.title : `${new Date().getTime()}`;
+    if (!downloadUrl) {
+        throw new Error('No downloadable content found');
+    }
+    return { downloadUrl, title, extension };
+};
+const handleDownloadCommand = async (bot, chatId) => {
+    await (0, mainMenu_1.sendMessage)(chatId, bot, 'Please send the URL of the video you want to download.', {
+        reply_markup: {
+            keyboard: [
+                [{ text: (0, systemLangs_1.getUserLanguage)(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : (0, systemLangs_1.getUserLanguage)(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }],
+            ],
+            resize_keyboard: true,
+            one_time_keyboard: false
+        }
+    });
+};
+exports.handleDownloadCommand = handleDownloadCommand;
+const handleMediaUrl = async (bot, msg) => {
+    const chatId = msg.chat.id;
+    const url = msg.text;
+    if (url && url.startsWith("http")) {
+        const processingMessage = await bot.sendMessage(chatId, (0, systemLangs_1.translateMessage)(chatId, 'Processing the URL, please wait..'), {
+            reply_markup: {
+                remove_keyboard: true
+            }
+        });
+        addMessageToContext(chatId, processingMessage.message_id);
+        try {
+            if (url.includes('instagram.com')) {
+                const { downloadUrl, title, extension } = await getInstagramDownloadDetails(url);
+                const sanitizedTitle = title.replace(/[^a-zA-Z0-9]/g, '_');
+                const filePaths = await downloadAndProcessMedia(downloadUrl, `${sanitizedTitle}.${extension}`, '', extension === 'mp4' ? 'Video' : 'Image', FILE_SIZE_LIMIT_MB * 1048576, '', true);
+                await sendMedia(bot, chatId, extension === 'mp4' ? 'Video' : 'Image', filePaths, true);
+                await bot.deleteMessage(chatId, processingMessage.message_id.toString());
+            }
+            else if (url.includes('tiktok.com')) {
+                const { downloadUrl, title, extension } = await getTikTokDownloadDetails(url);
+                const sanitizedTitle = title.replace(/[^a-zA-Z0-9]/g, '_');
+                const filePaths = await downloadAndProcessMedia(downloadUrl, `${sanitizedTitle}.${extension}`, '', extension === 'mp4' ? 'Video' : 'Image', FILE_SIZE_LIMIT_MB * 1048576, '', true);
+                await sendMedia(bot, chatId, extension === 'mp4' ? 'Video' : 'Image', filePaths, true);
+                await bot.deleteMessage(chatId, processingMessage.message_id.toString());
+            }
+            else {
+                const { title, isVideo, channel, formats } = await getYouTubeDownloadDetails(url);
+                const sanitizedTitle = title.replace(/[^a-zA-Z0-9]/g, '_');
+                if (isVideo) {
+                    await sendPaginatedFormats(bot, chatId, formats, title, channel, 1, msg);
+                    bot.on('callback_query', async (callbackQuery) => {
+                        const data = callbackQuery.data;
+                        const userId = callbackQuery.from.id;
+                        const replyMessageId = callbackQuery.message?.message_id;
+                        const chatId = callbackQuery.message?.chat.id;
+                        if (data.startsWith('page_')) {
+                            const page = parseInt(data.split('_')[1], 10);
+                            await sendPaginatedFormats(bot, chatId, formats, title, channel, page, msg);
+                        }
+                        else if (data.startsWith('format_')) {
+                            const formatIndex = parseInt(data.split('_')[1], 10);
+                            const selectedFormat = formats[formatIndex];
+                            const formatUrl = selectedFormat.url;
+                            const formatSize = selectedFormat.size;
+                            if (replyMessageId) {
+                                await bot.deleteMessage(userId, replyMessageId.toString());
+                            }
+                            let mediaType = 'Video';
+                            if (selectedFormat.qualityLabel === 'mp3') {
+                                mediaType = 'Audio';
+                            }
+                            else if (selectedFormat.qualityLabel === 'image') {
+                                mediaType = 'Image';
+                            }
+                            try {
+                                const filePaths = await downloadAndProcessMedia(formatUrl, `${sanitizedTitle}.${mediaType === 'Audio' ? 'mp3' : 'mp4'}`, `${sanitizedTitle}.mp3`, mediaType, formatSize, formats[0].url);
+                                await sendMedia(bot, chatId, mediaType, filePaths);
+                            }
+                            catch (error) {
+                                await handleError(bot, chatId, `Failed to process media: ${error.message}`);
+                            }
+                            await bot.deleteMessage(chatId, processingMessage.message_id.toString());
+                        }
+                    });
+                }
+            }
+        }
+        catch (error) {
+            await handleError(bot, chatId, error.message, processingMessage.message_id);
+        }
+    }
+    else {
+        bot.sendMessage(chatId, 'Invalid URL. Please enter a correct URL.', {
+            reply_markup: {
+                keyboard: [
+                    [{ text: "Bot turini o'zgartirish" }]
+                ],
+                resize_keyboard: true,
+                one_time_keyboard: false
+            },
+            reply_to_message_id: msg.message_id
+        });
+    }
+};
+exports.handleMediaUrl = handleMediaUrl;
 //# sourceMappingURL=downloader.js.map
