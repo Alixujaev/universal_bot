@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "startServer": "start \"\" \"C:\\Users\\user\\Desktop\\my\\telegram-bot-api\\build\\Release\\telegram-bot-api.exe\" --api-id=24814669 --api-hash=477bf48c7bd226c62d80c9b525b30883 --log=telegram-bot-api.log --verbosity=2",
+    "startServer": "start \"\" \"C:\\Users\\user\\Desktop\\my\\telegram-bot-api\\build\\Release\\telegram-bot-api.exe\" --api-id=24814669 --api-hash=477bf48c7bd226c62d80c9b525b30883 --log=telegram-bot-api.log --verbosity=2 --local",
     "start": "tsc && node dist/index.js",
-    "dev": "nodemon src/index.ts"
+    "dev": "nodemon src/index.ts" 
   },
   "keywords": [],
   "author": "",
