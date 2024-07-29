@@ -1,7 +1,5 @@
 import TelegramBot from 'node-telegram-bot-api';
 import * as dotenv from 'dotenv';
-import express from 'express';
-import path from 'path';
 import { 
     handleCurrencyCommand, handleCurrencySelection, handleCurrencyConversion, handleCurrencyPagination, handleChangeCurrency 
 } from './commands/currency';
@@ -23,18 +21,21 @@ import {
 
 dotenv.config();
 
-const LOCAL_BOT_API_URL = process.env.LOCAL_BOT_API_URL || 'https://api.telegram.org/bot';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const LOCAL_BOT_API_URL = process.env.LOCAL_BOT_API_URL;
+
+if (!TELEGRAM_TOKEN) {
+    throw new Error('TELEGRAM_TOKEN is not defined in environment variables');
+}
 
 export const bot = new TelegramBot(TELEGRAM_TOKEN, {
-  polling: true,
-  baseApiUrl: LOCAL_BOT_API_URL
+    polling: true,
+    baseApiUrl: LOCAL_BOT_API_URL
 });
 
 const userContextMap = new Map<number, string>();
 const userLangsMap = new Map<number, { code: string, name: string, flag: string }>();
 
-// Command constants
 const Commands = {
     CHANGE_TYPE: ['Change bot type', 'Bot turini o\'zgartirish', 'Изменить режим работы бота'],
     TRANSLATION: ['Translation', 'Tarjima', 'Перевод'],
@@ -43,7 +44,6 @@ const Commands = {
     CONVERT: ['File Conversion', 'Fayl Konvertatsiyasi', 'Конвертация файлов'],
 };
 
-// Function to handle command text validation
 function isValidCommand(command: string, context: string, lang: string) {
     return (
         (command === 'Change bot type' && lang === 'en') ||
@@ -64,7 +64,14 @@ function isValidCommand(command: string, context: string, lang: string) {
     );
 }
 
-// Main bot start command
+bot.on('polling_error', (error) => {
+    console.error('Polling error:', error.code);  // => 'EFATAL'
+});
+
+bot.on('webhook_error', (error) => {
+    console.error('Webhook error:', error.code);  // => 'EPARSE'
+});
+
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
     userContextMap.set(chatId, 'main');
@@ -72,20 +79,17 @@ bot.onText(/\/start/, async (msg) => {
     await selectLanguage(chatId, bot);
 });
 
-// Change language command
 bot.onText(/\/change_language/, async (msg) => {
     const chatId = msg.chat.id;
-    console.log(userContextMap.get(chatId));
-    
     await clearPreviousMessages(chatId, bot);
     await selectLanguage(chatId, bot);
 });
 
-// Generalized command handler
 function handleGeneralCommands(commandsArray: string[], context: string, callback: Function) {
     commandsArray.forEach(command => {
         bot.onText(new RegExp(`^${command}$`), async (msg) => {
             const chatId = msg.chat.id;
+            console.log(`${command} command received from chat ID ${chatId}`);
             if (isValidCommand(command, context, getUserLanguage(chatId))) {
                 userContextMap.set(chatId, context);
                 await clearPreviousMessages(chatId, bot);
@@ -97,7 +101,6 @@ function handleGeneralCommands(commandsArray: string[], context: string, callbac
     });
 }
 
-// Setup command handlers
 handleGeneralCommands(Commands.CHANGE_TYPE, 'main', async (chatId: number) => {
     sendMessage(chatId, bot, 'Please choose from the menu below:', mainMenuOptions(chatId));
 });
@@ -122,9 +125,9 @@ handleGeneralCommands(Commands.CONVERT, 'convert', async (chatId: number) => {
     await handleConvertCommand(bot, chatId);
 });
 
-// Handle specific commands with parameters
 bot.onText(/\/change_currency/, async (msg) => {
     const chatId = msg.chat.id;
+    console.log(`/change_currency command received from chat ID ${chatId}`);
     
     if (userContextMap.get(chatId) === 'currency') {
         await clearPreviousMessages(chatId, bot);
@@ -136,6 +139,7 @@ bot.onText(/\/change_currency/, async (msg) => {
 
 bot.onText(/\/setlanguage/, async (msg) => {
     const chatId = msg.chat.id;
+    console.log(`/setlanguage command received from chat ID ${chatId}`);
     if (userContextMap.get(chatId) === 'translate') {
         await clearPreviousMessages(chatId, bot);
         await setTranslationLanguage(bot, chatId);
@@ -144,14 +148,13 @@ bot.onText(/\/setlanguage/, async (msg) => {
     }
 });
 
-// Handle callback queries
 bot.on('callback_query', async (callbackQuery) => {
     const message = callbackQuery.message;
     const data = callbackQuery.data;
+    const chatId = message?.chat.id;
 
     if (message && data) {
-        const chatId = message.chat.id;
-
+        console.log(`Callback query received from chat ID ${chatId} with data ${data}`);
         await clearPreviousMessages(chatId, bot);
 
         if (data.startsWith('start_lang_')) {
@@ -193,9 +196,9 @@ bot.on('callback_query', async (callbackQuery) => {
     }
 });
 
-// Handle messages
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
+    console.log(`Message received from chat ID ${chatId}`);
     const context = userContextMap.get(chatId);
 
     if (msg.text && !msg.text.startsWith('/') && !Commands.CHANGE_TYPE.concat(Commands.TRANSLATION, Commands.DOWNLOAD, Commands.CURRENCY, Commands.CONVERT).map(cmd => translateMessage(chatId, cmd)).includes(msg.text)) {
@@ -218,15 +221,19 @@ bot.on('message', async (msg) => {
     }
 
     if (msg.document) {
+        console.log('Document message received');
         await handleDocumentMessage(bot, msg);
     } else if (msg.photo) {
         const fileId = msg.photo[msg.photo.length - 1].file_id;
         const fileName = `photo_${fileId}.jpg`;
         const mimeType = 'image/jpeg';
+        console.log('Photo message received');
 
         await handleDocumentMessage(bot, { ...msg, document: { file_id: fileId, file_name: fileName, mime_type: mimeType } });
     } else if (msg.video || msg.video_note) {
         console.log('Video message received');
         await handleVideoMessage(bot, msg);
+    } else if (msg.audio) {
+        // await handleAudioMessage(bot, msg);
     }
 });
