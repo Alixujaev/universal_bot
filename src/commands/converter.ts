@@ -52,10 +52,15 @@ const getConversionFormats = async (fileType: string) => {
 };
 
 const uploadFileToZamzar = async (filePath: string, targetFormat: string) => {
+    
     try {
         const formData = new FormData();
         formData.append('source_file', fs.createReadStream(filePath));
         formData.append('target_format', targetFormat);
+
+        console.log('source_file:', filePath);
+        console.log('target_format:', targetFormat);
+        
 
         const response = await axios.post(`${ZAMZAR_API_URL}/jobs`, formData, {
             auth: {
@@ -95,12 +100,12 @@ const downloadConvertedFile = async (fileUrl: string, outputPath: string) => {
     }
 };
 
-function replaceColonWithTilde(url: string): string {
-    const index = url.indexOf(':', url.indexOf('bot'));
-    if (index !== -1) {
-        return url.substring(0, index) + '~' + url.substring(index + 1).replace(/\\/g, '/');
+function removeBaseUrl(url) {
+    const baseUrl = "http://localhost:8081/file/bot7145108535:AAEWJdKKhRWfJZMy5rw_UnDkTgPXR4Ry-0g/";
+    if (url.startsWith(baseUrl)) {
+        return url.slice(baseUrl.length);
     }
-    return url.replace(/\\/g, '/');
+    return url; // Agar URL boshlanish qismi mos kelmasa, asl URL-ni qaytaradi
 }
 
 export const handleFileConversion = async (bot: TelegramBot, callbackQuery: TelegramBot.CallbackQuery) => {
@@ -115,12 +120,8 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
 
     const { fileId, fileName, fileType } = fileInfo;
 
-    const fileLink = replaceColonWithTilde(await bot.getFileLink(fileId));
-    console.log('fileLink:', fileLink);
-    console.log('dirname:', path.dirname(fileName));
+    const fileLink = await bot.getFileLink(fileId);
     
-    
-    const filePath = path.join(__dirname, 'tmp', fileName);
     const processingMessage = await bot.sendMessage(chatId, 'Processing the file, please wait...', {
         reply_markup: {
             remove_keyboard: true
@@ -129,28 +130,9 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
     });
     addMessageToContext(chatId, processingMessage.message_id);
 
-    // Ensure the tmp directory exists
-    if (!fs.existsSync(path.dirname(filePath))) {
-        fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    }
-
     try {
-        
-        // Download the file from Telegram
-        const response = await axios({
-            method: 'GET',
-            url: fileLink,
-            responseType: 'stream'
-        });
-        const fileStream = fs.createWriteStream(filePath);
-        response.data.pipe(fileStream);
 
-        await new Promise((resolve, reject) => {
-            fileStream.on('finish', resolve);
-            fileStream.on('error', reject);
-        });
-
-        const uploadResponse = await uploadFileToZamzar(filePath, targetFormat);
+        const uploadResponse = await uploadFileToZamzar(removeBaseUrl(fileLink), targetFormat);
         const jobId = uploadResponse.id;
         let jobResponse;
 
@@ -218,9 +200,9 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
         }
     } finally {
         // Delete the original file from the server
-        fs.unlink(filePath, (err) => {
-            if (err) console.error(`Failed to delete file: ${filePath}`, err);
-            else console.log(`Deleted file: ${filePath}`);
+        fs.unlink(removeBaseUrl(fileLink), (err) => {
+            if (err) console.error(`Failed to delete file: ${removeBaseUrl(fileLink)}`, err);
+            else console.log(`Deleted file: ${removeBaseUrl(fileLink)}`);
         });
         await bot.deleteMessage(chatId, processingMessage.message_id.toString());
     }
@@ -248,7 +230,7 @@ export const handleDocumentMessage = async (bot: TelegramBot, msg: TelegramBot.M
     await bot.sendChatAction(chatId, 'typing');
     const fileType = fileName.split('.').pop();
     const availableFormats = await getConversionFormats(fileType);
-    
+
     if (availableFormats.length === 0) {
         await bot.sendMessage(chatId, 'No available conversion formats for this file type.', {
             reply_markup: {
