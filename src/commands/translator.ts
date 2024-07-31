@@ -1,20 +1,14 @@
 import TelegramBot from 'node-telegram-bot-api';
 import axios from 'axios';
 import { languages } from '../utils/languages';
-import { getUserLanguage, translateMessage } from '../utils/systemLangs';
+import { translateMessage } from '../utils/systemLangs';
+import { user } from '..';
 
-const userMessageMap = new Map<number, number[]>();
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 
-const addMessageToContext = (chatId: number, messageId: number) => {
-    const messages = userMessageMap.get(chatId) || [];
-    messages.push(messageId);
-    userMessageMap.set(chatId, messages);
-};
 
 export const setTranslationLanguage = async (bot: TelegramBot, chatId: number,) => {
-    const sentMessage = await bot.sendMessage(chatId, translateMessage(chatId, 'What language would you like to translate into?'), createLanguageOptions());
-    addMessageToContext(chatId, sentMessage.message_id);
+    await bot.sendMessage(chatId, translateMessage(user.language.code, 'What language would you like to translate into?'), createLanguageOptions());
 };
 
 export const handleTranslationCommand = async (bot: TelegramBot, callbackQuery: TelegramBot.CallbackQuery, data: string, userLangsMap: Map<number, { code: string, name: string, flag: string }>) => {
@@ -54,29 +48,26 @@ export const handleTextMessage = async (bot: TelegramBot, msg: TelegramBot.Messa
                 const sentMessage = await bot.sendMessage(chatId, `${translatedText}`, {
                     reply_markup: {
                         keyboard: [
-                            [{ text: getUserLanguage(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : getUserLanguage(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
+                            [{ text: user.language.code === 'uz' ? 'Bot turini o\'zgartirish' : user.language.code === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
                         ],
                         resize_keyboard: true,
                         one_time_keyboard: false
                     },
                     reply_to_message_id: msg.message_id
                 });
-                addMessageToContext(chatId, sentMessage.message_id);
             } catch (error) {
                 const sentMessage = await bot.sendMessage(chatId, error.message, {
                     reply_markup: {
                         keyboard: [
-                            [{ text: getUserLanguage(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : getUserLanguage(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
+                            [{ text: user.language.code === 'uz' ? 'Bot turini o\'zgartirish' : user.language.code === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
                         ],
                         resize_keyboard: true,
                         one_time_keyboard: false
                     }
                 });
-                addMessageToContext(chatId, sentMessage.message_id);
             }
         } else {
             const sentMessage = await bot.sendMessage(chatId, 'Iltimos, avval tarjima tilini tanlang.', createLanguageOptions());
-            addMessageToContext(chatId, sentMessage.message_id);
         }
     }
 };

@@ -5,7 +5,7 @@
   "scripts": {
     "startServer": "start \"\" \"C:\\Users\\user\\Desktop\\my\\telegram-bot-api\\build\\Release\\telegram-bot-api.exe\" --api-id=24814669 --api-hash=477bf48c7bd226c62d80c9b525b30883 --log=telegram-bot-api.log --verbosity=2 --local",
     "start": "tsc && node dist/index.js",
-    "dev": "nodemon src/index.ts" 
+    "dev": "nodemon src/index.ts"
   },
   "keywords": [],
   "author": "",
@@ -23,6 +23,8 @@
     "googletrans": "^1.0.21",
     "https-proxy-agent": "^7.0.5",
     "instagram-scraper": "^1.0.6",
+    "mongodb": "^6.8.0",
+    "mongoose": "^8.5.2",
     "node-telegram-bot-api": "^0.66.0",
     "nodemon": "^3.1.4",
     "openai": "^4.52.7",

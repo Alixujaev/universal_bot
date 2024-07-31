@@ -1,8 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { addMessageToContext } from './mainMenu';
 
-export const userLanguageMap = new Map<number, { code: string, name: string, flag: string, translationFunction: (text: string, variables: { [key: string]: string }) => string }>();
-
 export function translateToUzbek (text: string, variables: { [key: string]: string } = {}) {
   const translations = {
       'Welcome to the universal bot! Please choose from the menu below:': 'Universal botga xush kelibsiz! Quyidagi menyudan tanlang:',
@@ -119,9 +117,9 @@ export function translateToEnglish (text: string, variables: { [key: string]: st
 
 
 export const languageOptions = [
-  { code: 'en', name: 'English', flag: '🇺🇸', translationFunction: translateToEnglish},
-  { code: 'uz', name: 'Uzbek', flag: '🇺🇿', translationFunction: translateToUzbek },
-  { code: 'ru', name: 'Russian', flag: '🇷🇺', translationFunction: translateToRussian },
+  { code: 'en', name: 'English', flag: '🇺🇸'},
+  { code: 'uz', name: 'Uzbek', flag: '🇺🇿' },
+  { code: 'ru', name: 'Russian', flag: '🇷🇺' },
 ];
 
 
@@ -137,15 +135,13 @@ export const selectLanguage = async (chatId: number, bot: TelegramBot) => {
 };
 
 
-export const translateMessage = (chatId: number, text: string, variables: { [key: string]: string } = {}) => {
-  const userLanguage = userLanguageMap.get(chatId);
-  if (userLanguage) {
-      return userLanguage.translationFunction(text, variables);
+export const translateMessage = (lang: string, text: string, variables: { [key: string]: string } = {}) => {
+  if (lang === 'ru') {
+      return translateToRussian(text, variables);
+  }else if(lang === 'uz'){
+    return translateToUzbek(text, variables);
+  }else {
+    return translateToEnglish(text, variables);
   }
-  return text;
 };
 
-
-export const getUserLanguage = (chatId: number) => {
-  return userLanguageMap.get(chatId)?.code || 'en';
-};

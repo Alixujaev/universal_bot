@@ -12,21 +12,30 @@ import {
 import { 
     handleDownloadCommand, handleMediaUrl 
 } from './commands/downloader';
-import { 
-    getUserLanguage, languageOptions, selectLanguage, translateMessage, userLanguageMap 
+import {  languageOptions, selectLanguage, translateMessage 
 } from './utils/systemLangs';
 import { 
     clearPreviousMessages, mainMenuOptions, sendMessage 
 } from './utils/mainMenu';
+import mongoose from 'mongoose';
+import { User } from './utils/user';
+import { UserType } from './types';
 
 dotenv.config();
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const LOCAL_BOT_API_URL = process.env.LOCAL_BOT_API_URL;
+const MONGO_URI = process.env.MONGO_URI;
 
 if (!TELEGRAM_TOKEN) {
     throw new Error('TELEGRAM_TOKEN is not defined in environment variables');
 }
+
+mongoose.connect(MONGO_URI).then(() => {
+    console.log('MongoDB ga muvaffaqiyatli ulandi');
+}).catch((error) => {
+    console.error('MongoDB ga ulanishda xatolik:', error);
+});
 
 export const bot = new TelegramBot(TELEGRAM_TOKEN, {
     polling: true,
@@ -35,6 +44,13 @@ export const bot = new TelegramBot(TELEGRAM_TOKEN, {
 
 const userContextMap = new Map<number, string>();
 const userLangsMap = new Map<number, { code: string, name: string, flag: string }>();
+export let user: UserType = {
+    chatId: 0,
+    name: '',
+    context: '',
+    language: { code: 'en', name: 'English', flag: '🇬🇧' },
+    is_premium: false
+}
 
 const Commands = {
     CHANGE_TYPE: ['Change bot type', 'Bot turini o\'zgartirish', 'Изменить режим работы бота'],
@@ -73,15 +89,27 @@ bot.on('webhook_error', (error) => {
 });
 
 bot.onText(/\/start/, async (msg) => {
+    if(msg.from.is_bot) return;
+    const existUser = await User.findOne({ chatId: msg.chat.id });
     const chatId = msg.chat.id;
     userContextMap.set(chatId, 'main');
-    await clearPreviousMessages(chatId, bot);
     await selectLanguage(chatId, bot);
+    if(!existUser){
+        await User.create({ 
+            chatId, 
+            name: msg.chat.first_name ? msg.chat.first_name : "Default", 
+            context: "", 
+            language: {}, 
+            translate_lang: {}, 
+            currency_from: {}, 
+            currency_to: {}, 
+            is_premium: false
+         });
+    }
 });
 
 bot.onText(/\/change_language/, async (msg) => {
     const chatId = msg.chat.id;
-    await clearPreviousMessages(chatId, bot);
     await selectLanguage(chatId, bot);
 });
 
@@ -89,20 +117,18 @@ function handleGeneralCommands(commandsArray: string[], context: string, callbac
     commandsArray.forEach(command => {
         bot.onText(new RegExp(`^${command}$`), async (msg) => {
             const chatId = msg.chat.id;
-            console.log(`${command} command received from chat ID ${chatId}`);
-            if (isValidCommand(command, context, getUserLanguage(chatId))) {
+            if (isValidCommand(command, context, user.language.code)) {
                 userContextMap.set(chatId, context);
-                await clearPreviousMessages(chatId, bot);
                 await callback(chatId);
             } else {
-                await bot.sendMessage(chatId, 'Invalid command. Please select a valid option.', mainMenuOptions(chatId));
+                await bot.sendMessage(chatId, 'Invalid command. Please select a valid option.', mainMenuOptions());
             }
         });
     });
 }
 
 handleGeneralCommands(Commands.CHANGE_TYPE, 'main', async (chatId: number) => {
-    sendMessage(chatId, bot, 'Please choose from the menu below:', mainMenuOptions(chatId));
+    sendMessage(chatId, bot, 'Please choose from the menu below:', mainMenuOptions());
 });
 
 handleGeneralCommands(Commands.TRANSLATION, 'translate', async (chatId: number) => {
@@ -130,10 +156,9 @@ bot.onText(/\/change_currency/, async (msg) => {
     console.log(`/change_currency command received from chat ID ${chatId}`);
     
     if (userContextMap.get(chatId) === 'currency') {
-        await clearPreviousMessages(chatId, bot);
         await handleChangeCurrency(bot, msg);
     } else {
-        await bot.sendMessage(chatId, 'Invalid command. Please select a valid option.', mainMenuOptions(chatId));
+        await bot.sendMessage(chatId, 'Invalid command. Please select a valid option.', mainMenuOptions());
     }
 });
 
@@ -141,7 +166,6 @@ bot.onText(/\/setlanguage/, async (msg) => {
     const chatId = msg.chat.id;
     console.log(`/setlanguage command received from chat ID ${chatId}`);
     if (userContextMap.get(chatId) === 'translate') {
-        await clearPreviousMessages(chatId, bot);
         await setTranslationLanguage(bot, chatId);
     } else {
         await sendMessage(chatId, bot, 'Invalid command. This command only works in "Translation" mode.');
@@ -154,14 +178,12 @@ bot.on('callback_query', async (callbackQuery) => {
     const chatId = message?.chat.id;
 
     if (message && data) {
-        console.log(`Callback query received from chat ID ${chatId} with data ${data}`);
-        await clearPreviousMessages(chatId, bot);
-
+        
         if (data.startsWith('start_lang_')) {
             const selectedLang = languageOptions.find(lang => `start_lang_${lang.code}` === data);
             if (selectedLang) {
-                userLanguageMap.set(chatId, selectedLang);
-                await sendMessage(chatId, bot, 'Welcome to the universal bot! Please choose from the menu below:', mainMenuOptions(chatId));
+                user = await User.findOneAndUpdate({ chatId }, { language: selectedLang }, { new: true });     
+                await sendMessage(chatId, bot, 'Welcome to the universal bot! Please choose from the menu below:', mainMenuOptions());
             }
         } else if (data.startsWith('from_')) {
             if (data.includes('page_')) {
@@ -202,7 +224,6 @@ bot.on('message', async (msg) => {
     const context = userContextMap.get(chatId);
 
     if (msg.text && !msg.text.startsWith('/') && !Commands.CHANGE_TYPE.concat(Commands.TRANSLATION, Commands.DOWNLOAD, Commands.CURRENCY, Commands.CONVERT).map(cmd => translateMessage(chatId, cmd)).includes(msg.text)) {
-        await clearPreviousMessages(chatId, bot);
 
         if (context === 'translate') {
             handleTextMessage(bot, msg, userLangsMap);
@@ -237,3 +258,4 @@ bot.on('message', async (msg) => {
         // await handleAudioMessage(bot, msg);
     }
 });
+

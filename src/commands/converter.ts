@@ -4,6 +4,7 @@ import * as dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import FormData from 'form-data';
+import { user } from '..';
 
 dotenv.config();
 
@@ -14,26 +15,19 @@ if (!ZAMZAR_API_KEY) {
     throw new Error('ZAMZAR_API_KEY is not defined in environment variables');
 }
 
-const userMessageMap = new Map<number, number[]>();
 const userFileMap = new Map<number, { fileId: string, fileName: string, fileType: string }>();
 
-const addMessageToContext = (chatId: number, messageId: number) => {
-    const messages = userMessageMap.get(chatId) || [];
-    messages.push(messageId);
-    userMessageMap.set(chatId, messages);
-};
 
 export const handleConvertCommand = async (bot: TelegramBot, chatId: number) => {
     const sentMessage = await bot.sendMessage(chatId, 'Please send the file you want to convert.', {
         reply_markup: {
             keyboard: [
-                [{ text: "Bot turini o'zgartirish" }],
+                [{ text: user.language.code === 'uz' ? 'Bot turini o\'zgartirish' : user.language.code === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }],
             ],
             resize_keyboard: true,
             one_time_keyboard: false
         },
     });
-    addMessageToContext(chatId, sentMessage.message_id);
 };
 
 const getConversionFormats = async (fileType: string) => {
@@ -128,7 +122,6 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
         },
         reply_to_message_id: callbackQuery.message?.message_id
     });
-    addMessageToContext(chatId, processingMessage.message_id);
 
     try {
 
@@ -159,7 +152,7 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
         await bot.sendDocument(chatId, outputPath, {
             reply_markup: {
                 keyboard: [
-                    [{ text: "Bot turini o'zgartirish" }],
+                    [{ text: user.language.code === 'uz' ? 'Bot turini o\'zgartirish' : user.language.code === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }],
                 ],
                 resize_keyboard: true,
                 one_time_keyboard: false
@@ -179,7 +172,7 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
             await bot.sendMessage(chatId, 'The file is too large to convert. Please send a smaller file.', {
                 reply_markup: {
                     keyboard: [
-                        [{ text: "Bot turini o'zgartirish" }],
+                        [{ text: user.language.code === 'uz' ? 'Bot turini o\'zgartirish' : user.language.code === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }],
                     ],
                     resize_keyboard: true,
                     one_time_keyboard: false
@@ -190,7 +183,7 @@ export const handleFileConversion = async (bot: TelegramBot, callbackQuery: Tele
             await bot.sendMessage(chatId, `Failed to convert file: ${error.message}`, {
                 reply_markup: {
                     keyboard: [
-                        [{ text: "Bot turini o'zgartirish" }],
+                        [{ text: user.language.code === 'uz' ? 'Bot turini o\'zgartirish' : user.language.code === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }],
                     ],
                     resize_keyboard: true,
                     one_time_keyboard: false
@@ -218,7 +211,7 @@ export const handleDocumentMessage = async (bot: TelegramBot, msg: TelegramBot.M
         await bot.sendMessage(chatId, 'Please send a valid file.', {
             reply_markup: {
                 keyboard: [
-                    [{ text: "Bot turini o'zgartirish" }],
+                    [{ text: user.language.code === 'uz' ? 'Bot turini o\'zgartirish' : user.language.code === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }],
                 ],
                 resize_keyboard: true,
                 one_time_keyboard: false
@@ -235,7 +228,7 @@ export const handleDocumentMessage = async (bot: TelegramBot, msg: TelegramBot.M
         await bot.sendMessage(chatId, 'No available conversion formats for this file type.', {
             reply_markup: {
                 keyboard: [
-                    [{ text: "Bot turini o'zgartirish" }],
+                    [{ text: user.language.code === 'uz' ? 'Bot turini o\'zgartirish' : user.language.code === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }],
                 ],
                 resize_keyboard: true,
                 one_time_keyboard: false
@@ -273,7 +266,7 @@ export const handleVideoMessage = async (bot: TelegramBot, msg: TelegramBot.Mess
         await bot.sendMessage(chatId, 'Please send a valid video.', {
             reply_markup: {
                 keyboard: [
-                    [{ text: "Bot turini o'zgartirish" }],
+                    [{ text: user.language.code === 'uz' ? 'Bot turini o\'zgartirish' : user.language.code === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }],
                 ],
                 resize_keyboard: true,
                 one_time_keyboard: false
@@ -291,7 +284,7 @@ export const handleVideoMessage = async (bot: TelegramBot, msg: TelegramBot.Mess
         await bot.sendMessage(chatId, 'No available conversion formats for this video type.', {
             reply_markup: {
                 keyboard: [
-                    [{ text: "Bot turini o'zgartirish" }],
+                    [{ text: user.language.code === 'uz' ? 'Bot turini o\'zgartirish' : user.language.code === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }],
                 ],
                 resize_keyboard: true,
                 one_time_keyboard: false
@@ -311,6 +304,61 @@ export const handleVideoMessage = async (bot: TelegramBot, msg: TelegramBot.Mess
     }
 
     await bot.sendMessage(chatId, `Video turi ${fileType.toUpperCase()}\nUni quyidagilarga konvertatsiyalash mumkin:`, {
+        reply_markup: {
+            inline_keyboard: formatKeyboard,
+        },
+        reply_to_message_id: msg.message_id
+    });
+};
+
+export const handleAudioMessage = async (bot: TelegramBot, msg: TelegramBot.Message) => {
+    const chatId = msg.chat.id;
+    const fileId = msg.audio?.file_id || msg.voice?.file_id;
+    const fileName = `${msg.audio?.file_unique_id || msg.voice?.file_unique_id}.mp3`;
+    const mimeType = msg.audio?.mime_type || 'audio/mpeg';
+
+    if (!fileId || !fileName || !mimeType) {
+        await bot.sendMessage(chatId, 'Please send a valid audio file.', {
+            reply_markup: {
+                keyboard: [
+                    [{ text: user.language.code === 'uz' ? 'Bot turini o\'zgartirish' : user.language.code === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }],
+                ],
+                resize_keyboard: true,
+                one_time_keyboard: false
+            },
+            reply_to_message_id: msg.message_id
+        });
+        return;
+    }
+
+    await bot.sendChatAction(chatId, 'typing');
+    const fileType = fileName.split('.').pop();
+    const availableFormats = await getConversionFormats(fileType);
+
+    if (availableFormats.length === 0) {
+        await bot.sendMessage(chatId, 'No available conversion formats for this audio type.', {
+            reply_markup: {
+                keyboard: [
+                    [{ text: user.language.code === 'uz' ? 'Bot turini o\'zgartirish' : user.language.code === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }],
+                ],
+                resize_keyboard: true,
+                one_time_keyboard: false
+            },
+            reply_to_message_id: msg.message_id
+        });
+        return;
+    }
+
+    userFileMap.set(chatId, { fileId, fileName, fileType });
+
+    const formatButtons = availableFormats.map((format: { name: string }) => ({ text: format.name.toUpperCase(), callback_data: `convert_${format.name}` }));
+    const formatKeyboard = [];
+
+    for (let i = 0; i < formatButtons.length; i += 3) {
+        formatKeyboard.push(formatButtons.slice(i, i + 3));
+    }
+
+    await bot.sendMessage(chatId, `Audio turi ${fileType.toUpperCase()}\nUni quyidagilarga konvertatsiyalash mumkin:`, {
         reply_markup: {
             inline_keyboard: formatKeyboard,
         },

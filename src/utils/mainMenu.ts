@@ -1,10 +1,11 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { translateMessage } from "./systemLangs";
-
+import {user} from "..";
 const userMessageMap = new Map<number, number[]>();
 
-export const mainMenuOptions = (chatId: number) => {
-  const translate = (text: string) => translateMessage(chatId, text);
+export const mainMenuOptions = () => {
+  const translate = (text: string) => translateMessage(user.language.code, text);
+  
   return {
       reply_markup: {
           keyboard: [
@@ -37,7 +38,7 @@ export const addMessageToContext = (chatId: number, messageId: number) => {
 
 
 export const sendMessage = async (chatId: number, bot: TelegramBot, text: string, options?: TelegramBot.SendMessageOptions) => {
-  const translatedText = translateMessage(chatId, text);
-  const message = await bot.sendMessage(chatId, translatedText, options);
-  addMessageToContext(chatId, message.message_id);
+  const translatedText = translateMessage(user.language.code, text);
+  
+  await bot.sendMessage(chatId, translatedText, options);
 };

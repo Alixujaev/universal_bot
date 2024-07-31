@@ -2,7 +2,8 @@ import TelegramBot from 'node-telegram-bot-api';
 import axios from 'axios';
 import * as dotenv from 'dotenv';
 import { currencies } from '../utils/currencies';
-import { getUserLanguage, translateMessage } from '../utils/systemLangs';
+import { translateMessage } from '../utils/systemLangs';
+import { user } from '..';
 
 dotenv.config();
 
@@ -12,14 +13,8 @@ if (!EXCHANGE_RATE_API_KEY) {
     throw new Error('EXCHANGE_RATE_API_KEY is not defined in environment variables');
 }
 
-const userMessageMap = new Map<number, number[]>();
 const userCurrencyMap = new Map<number, { from: string, to: string }>();
 
-const addMessageToContext = (chatId: number, messageId: number) => {
-    const messages = userMessageMap.get(chatId) || [];
-    messages.push(messageId);
-    userMessageMap.set(chatId, messages);
-};
 
 export const createCurrencyOptions = (step: 'from' | 'to', page: number = 1) => {
   const itemsPerPage = 18;
@@ -55,8 +50,7 @@ export const createCurrencyOptions = (step: 'from' | 'to', page: number = 1) => 
 
 
 export const handleCurrencyCommand = async (bot: TelegramBot, chatId: number) => {
-    const sentMessage = await bot.sendMessage(chatId, translateMessage(chatId, 'Which currency do you want to calculate?'), createCurrencyOptions('from'));
-    addMessageToContext(chatId, sentMessage.message_id);
+    const sentMessage = await bot.sendMessage(chatId, translateMessage(user.language.code, 'Which currency do you want to calculate?'), createCurrencyOptions('from'));
 };
 
 export const handleCurrencySelection = async (bot: TelegramBot, callbackQuery: TelegramBot.CallbackQuery, data: string, step: 'from' | 'to') => {
@@ -116,14 +110,13 @@ export const handleCurrencyConversion = async (bot: TelegramBot, msg: TelegramBo
             const sentMessage = await bot.sendMessage(chatId, 'Please enter the correct amount:', {
                 reply_markup: {
                     keyboard: [
-                        [{ text: getUserLanguage(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : getUserLanguage(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
+                        [{ text: user.language.code === 'uz' ? 'Bot turini o\'zgartirish' : user.language.code === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
                     ],
                     resize_keyboard: true,
                     one_time_keyboard: false
                 },
                 reply_to_message_id: msg.message_id
             });
-            addMessageToContext(chatId, sentMessage.message_id);
             return;
         }
 
@@ -137,14 +130,13 @@ export const handleCurrencyConversion = async (bot: TelegramBot, msg: TelegramBo
             const sentMessage = await bot.sendMessage(chatId, `${amount} ${userCurrencies.from} ${currencies.find(c => c.code === userCurrencies.from)?.flag} = ${convertedAmount} ${userCurrencies.to} ${currencies.find(c => c.code === userCurrencies.to)?.flag}`, {
                 reply_markup: {
                     keyboard: [
-                        [{ text: getUserLanguage(chatId) === 'uz' ? 'Bot turini o\'zgartirish' : getUserLanguage(chatId) === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
+                        [{ text: user.language.code === 'uz' ? 'Bot turini o\'zgartirish' : user.language.code === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
                     ],
                     resize_keyboard: true,
                     one_time_keyboard: false
                 },
                 reply_to_message_id: msg.message_id
             });
-            addMessageToContext(chatId, sentMessage.message_id);
         } catch (error) {
             const sentMessage = await bot.sendMessage(chatId, translateMessage(chatId, 'An error occurred while retrieving exchange rates. Please try again later.'), {
                 reply_markup: {
@@ -155,11 +147,9 @@ export const handleCurrencyConversion = async (bot: TelegramBot, msg: TelegramBo
                     one_time_keyboard: false
                 }
             });
-            addMessageToContext(chatId, sentMessage.message_id);
         }
     } else {
         const sentMessage = await bot.sendMessage(chatId, translateMessage(chatId, 'Please select currencies first.'));
-        addMessageToContext(chatId, sentMessage.message_id);
     }
 };
 
