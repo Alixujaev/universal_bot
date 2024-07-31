@@ -1,4 +1,3 @@
-import TelegramBot from 'node-telegram-bot-api';
 import * as dotenv from 'dotenv';
 import { 
     handleCurrencyCommand, handleCurrencySelection, handleCurrencyConversion, handleCurrencyPagination, handleChangeCurrency 
@@ -14,33 +13,16 @@ import {
 } from './commands/downloader';
 import {  languageOptions, selectLanguage, translateMessage 
 } from './utils/systemLangs';
-import { 
-    clearPreviousMessages, mainMenuOptions, sendMessage 
+import {  mainMenuOptions, sendMessage 
 } from './utils/mainMenu';
-import mongoose from 'mongoose';
 import { User } from './utils/user';
 import { UserType } from './types';
+import { bot } from './botInstance';
+import { broadcastMessage, handleAdminCommand } from './admin';
+import { connectDatabase } from './database';
 
 dotenv.config();
-
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-const LOCAL_BOT_API_URL = process.env.LOCAL_BOT_API_URL;
-const MONGO_URI = process.env.MONGO_URI;
-
-if (!TELEGRAM_TOKEN) {
-    throw new Error('TELEGRAM_TOKEN is not defined in environment variables');
-}
-
-mongoose.connect(MONGO_URI).then(() => {
-    console.log('MongoDB ga muvaffaqiyatli ulandi');
-}).catch((error) => {
-    console.error('MongoDB ga ulanishda xatolik:', error);
-});
-
-export const bot = new TelegramBot(TELEGRAM_TOKEN, {
-    polling: true,
-    baseApiUrl: LOCAL_BOT_API_URL
-});
+connectDatabase();
 
 const userContextMap = new Map<number, string>();
 const userLangsMap = new Map<number, { code: string, name: string, flag: string }>();
@@ -57,6 +39,7 @@ const Commands = {
     DOWNLOAD: ['Download', 'Yuklash', 'Скачать'],
     CURRENCY: ['Currency Calculator', 'Valyuta Kalkulyatori', 'Калькулятор валют'],
     CONVERT: ['File Conversion', 'Fayl Konvertatsiyasi', 'Конвертация файлов'],
+    ADMIN: ['/admin'] // Admin buyruqni qo'shish
 };
 
 function isValidCommand(command: string, context: string, lang: string) {
@@ -171,6 +154,8 @@ bot.onText(/\/setlanguage/, async (msg) => {
     }
 });
 
+bot.onText(/\/admin/, handleAdminCommand);
+
 bot.on('callback_query', async (callbackQuery) => {
     const message = callbackQuery.message;
     const data = callbackQuery.data;
@@ -217,13 +202,14 @@ bot.on('callback_query', async (callbackQuery) => {
     }
 });
 
+
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
-    console.log(`Message received from chat ID ${chatId}`);
     const context = userContextMap.get(chatId);
 
-    if (msg.text && !msg.text.startsWith('/') && !Commands.CHANGE_TYPE.concat(Commands.TRANSLATION, Commands.DOWNLOAD, Commands.CURRENCY, Commands.CONVERT).map(cmd => translateMessage(chatId, cmd)).includes(msg.text)) {
+    await broadcastMessage(msg);
 
+    if (msg.text && !msg.text.startsWith('/') && !Commands.CHANGE_TYPE.concat(Commands.TRANSLATION, Commands.DOWNLOAD, Commands.CURRENCY, Commands.CONVERT).map(cmd => translateMessage(chatId, cmd)).includes(msg.text)) {
         if (context === 'translate') {
             handleTextMessage(bot, msg, userLangsMap);
         } else if (context === 'save') {
@@ -234,27 +220,21 @@ bot.on('message', async (msg) => {
             if (msg.document) {
                 await handleDocumentMessage(bot, msg);
             } else if (msg.video) {
-                console.log('Video message received');
                 await handleVideoMessage(bot, msg);
             }
         }
     }
 
     if (msg.document) {
-        console.log('Document message received');
         await handleDocumentMessage(bot, msg);
     } else if (msg.photo) {
         const fileId = msg.photo[msg.photo.length - 1].file_id;
         const fileName = `photo_${fileId}.jpg`;
         const mimeType = 'image/jpeg';
-        console.log('Photo message received');
 
         await handleDocumentMessage(bot, { ...msg, document: { file_id: fileId, file_name: fileName, mime_type: mimeType } });
     } else if (msg.video || msg.video_note) {
-        console.log('Video message received');
         await handleVideoMessage(bot, msg);
-    } else if (msg.audio) {
-        // await handleAudioMessage(bot, msg);
     }
 });
 
