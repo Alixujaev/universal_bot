@@ -47,7 +47,6 @@ const userLangsMap = new Map<number, { code: string, name: string, flag: string 
 export let user: UserType = {
     chatId: 0,
     name: '',
-    context: '',
     language: { code: 'en', name: 'English', flag: '🇬🇧' },
     is_premium: false
 }
