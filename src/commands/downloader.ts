@@ -145,6 +145,7 @@ const sendMedia = async (
                 });
             } else {
                 await bot.sendVideo(chatId, filePaths.mergedOutputPath, {
+                    supports_streaming: true,
                     caption: `@tg_multitask_bot`,
                     reply_markup: {
                         keyboard: [

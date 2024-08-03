@@ -10,7 +10,8 @@ export const mainMenuOptions = () => {
       reply_markup: {
           keyboard: [
               [{ text: translate('Translation') }, { text: translate('Download') }],
-              [{ text: translate('Currency Calculator') }, { text: translate('File Conversion') }]
+              [{ text: translate('Currency Calculator') }, { text: translate('File Conversion') }],
+              [{ text: translate('Text to voice') }],
           ],
           resize_keyboard: true,
           one_time_keyboard: false

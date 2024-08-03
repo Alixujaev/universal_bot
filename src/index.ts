@@ -6,7 +6,7 @@ import {
     handleTranslationCommand, setTranslationLanguage, handleTextMessage 
 } from './commands/translator';
 import { 
-    handleConvertCommand, handleFileConversion, handleDocumentMessage, handleVideoMessage 
+    handleConvertCommand, handleFileConversion, handleDocumentMessage, handleVideoMessage, handleAudioMessage 
 } from './commands/converter';
 import { 
     handleDownloadCommand, handleMediaUrl 
@@ -18,8 +18,9 @@ import {  mainMenuOptions, sendMessage
 import { User } from './utils/user';
 import { UserType } from './types';
 import { bot } from './botInstance';
-import { broadcastMessage, handleAdminCommand } from './admin';
+import { broadcastMessage, handleAdminCommand, handleStatsCommand } from './admin';
 import { connectDatabase } from './database';
+import { handleTextToVoice, handleTextToVoiceCommand, handleVoiceToText } from './commands/voice';
 
 dotenv.config();
 connectDatabase();
@@ -39,6 +40,7 @@ const Commands = {
     DOWNLOAD: ['Download', 'Yuklash', 'Скачать'],
     CURRENCY: ['Currency Calculator', 'Valyuta Kalkulyatori', 'Калькулятор валют'],
     CONVERT: ['File Conversion', 'Fayl Konvertatsiyasi', 'Конвертация файлов'],
+    VOICE: ['Text to voice', 'Matnni ovozga aylantirish', 'Текст в голос'],
     ADMIN: ['/admin'] // Admin buyruqni qo'shish
 };
 
@@ -58,7 +60,10 @@ function isValidCommand(command: string, context: string, lang: string) {
         (command === 'Калькулятор валют' && lang === 'ru') ||
         (command === 'File Conversion' && lang === 'en') ||
         (command === 'Fayl Konvertatsiyasi' && lang === 'uz') ||
-        (command === 'Конвертация файлов' && lang === 'ru')
+        (command === 'Конвертация файлов' && lang === 'ru') || 
+        (command === 'Text to voice' && lang === 'en') ||
+        (command === 'Matnni ovozga aylantirish' && lang === 'uz') ||
+        (command === 'Текст в голос' && lang === 'ru')
     );
 }
 
@@ -94,6 +99,8 @@ bot.onText(/\/change_language/, async (msg) => {
     const chatId = msg.chat.id;
     await selectLanguage(chatId, bot);
 });
+
+bot.onText(/\/stats/, handleStatsCommand);
 
 function handleGeneralCommands(commandsArray: string[], context: string, callback: Function) {
     commandsArray.forEach(command => {
@@ -131,6 +138,11 @@ handleGeneralCommands(Commands.CURRENCY, 'currency', async (chatId: number) => {
 handleGeneralCommands(Commands.CONVERT, 'convert', async (chatId: number) => {
     await sendMessage(chatId, bot, 'You have selected the file conversion service.');
     await handleConvertCommand(bot, chatId);
+});
+
+handleGeneralCommands(Commands.VOICE, 'voice', async (chatId: number) => {
+    await sendMessage(chatId, bot, 'You have selected the TTS service.');
+    await handleTextToVoiceCommand(bot, chatId);
 });
 
 bot.onText(/\/change_currency/, async (msg) => {
@@ -198,6 +210,8 @@ bot.on('callback_query', async (callbackQuery) => {
             await handleTranslationCommand(bot, callbackQuery, data, userLangsMap);
         } else if (data.startsWith('convert_')) {
             await handleFileConversion(bot, callbackQuery);
+        }else if (data === 'voice'){
+            await handleTextToVoiceCommand(bot, chatId);
         }
     }
 });
@@ -209,7 +223,7 @@ bot.on('message', async (msg) => {
 
     await broadcastMessage(msg);
 
-    if (msg.text && !msg.text.startsWith('/') && !Commands.CHANGE_TYPE.concat(Commands.TRANSLATION, Commands.DOWNLOAD, Commands.CURRENCY, Commands.CONVERT).map(cmd => translateMessage(chatId, cmd)).includes(msg.text)) {
+    if (msg  && !Commands.CHANGE_TYPE.concat(Commands.TRANSLATION, Commands.DOWNLOAD, Commands.CURRENCY, Commands.CONVERT).map(cmd => translateMessage(chatId, cmd)).includes(msg.text)) {
         if (context === 'translate') {
             handleTextMessage(bot, msg, userLangsMap);
         } else if (context === 'save') {
@@ -221,6 +235,14 @@ bot.on('message', async (msg) => {
                 await handleDocumentMessage(bot, msg);
             } else if (msg.video) {
                 await handleVideoMessage(bot, msg);
+            }
+        } else if (context === 'voice') {
+            if(msg.voice || msg.audio){
+                console.log('VOICEEE INDEX');
+                
+                handleVoiceToText(bot, msg);
+            }else{
+                handleTextToVoice(bot, msg);
             }
         }
     }
@@ -235,6 +257,8 @@ bot.on('message', async (msg) => {
         await handleDocumentMessage(bot, { ...msg, document: { file_id: fileId, file_name: fileName, mime_type: mimeType } });
     } else if (msg.video || msg.video_note) {
         await handleVideoMessage(bot, msg);
+    } else if (msg.audio || msg.audio_note) {
+        await handleAudioMessage(bot, msg);
     }
 });
 
