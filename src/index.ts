@@ -220,13 +220,21 @@ bot.on('callback_query', async (callbackQuery) => {
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const context = userContextMap.get(chatId);
-
+    
     await broadcastMessage(msg);
 
     if (msg  && !Commands.CHANGE_TYPE.concat(Commands.TRANSLATION, Commands.DOWNLOAD, Commands.CURRENCY, Commands.CONVERT).map(cmd => translateMessage(chatId, cmd)).includes(msg.text)) {
-        if (context === 'translate') {
+        if(context === 'main'){
+            bot.sendMessage(chatId, 'Invalid command. Please select a valid option.', mainMenuOptions());
+        }else if (context === 'translate') {
+            if(msg.document || msg.video || msg.photo || msg.video_note || msg.audio || msg.audio_note) {
+                await bot.sendMessage(chatId, 'Bu statusda file yuklash mumkin emas.');
+            }
             handleTextMessage(bot, msg, userLangsMap);
         } else if (context === 'save') {
+            if(msg.document || msg.video || msg.photo || msg.video_note || msg.audio || msg.audio_note) {
+                await bot.sendMessage(chatId, 'Bu statusda file yuklash mumkin emas.');
+            }
             handleMediaUrl(bot, msg);
         } else if (context === 'currency') {
             handleCurrencyConversion(bot, msg);
@@ -247,16 +255,16 @@ bot.on('message', async (msg) => {
         }
     }
 
-    if (msg.document) {
+    if (msg.document && Commands.CONVERT.includes(msg.text)) {
         await handleDocumentMessage(bot, msg);
-    } else if (msg.photo) {
+    } else if (msg.photo && Commands.CONVERT.includes(msg.text)) {
         const fileId = msg.photo[msg.photo.length - 1].file_id;
         const fileName = `photo_${fileId}.jpg`;
         const mimeType = 'image/jpeg';
 
         await handleDocumentMessage(bot, { ...msg, document: { file_id: fileId, file_name: fileName, mime_type: mimeType } });
-    } else if (msg.video || msg.video_note) {
-        await handleVideoMessage(bot, msg);
+    } else if (msg.video || msg.video_note && Commands.CONVERT.includes(msg.text)) {
+        await handleVideoMessage(bot, msg && Commands.CONVERT.includes(msg.text));
     } else if (msg.audio || msg.audio_note) {
         await handleAudioMessage(bot, msg);
     }

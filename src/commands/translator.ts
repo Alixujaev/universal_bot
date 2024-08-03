@@ -19,6 +19,8 @@ export const handleTranslationCommand = async (bot: TelegramBot, callbackQuery: 
 
     if (!chatId || !messageId) return;
 
+
+
     if (language) {
         userLangsMap.set(chatId, language);
         
@@ -36,6 +38,7 @@ export const handleTranslationCommand = async (bot: TelegramBot, callbackQuery: 
 export const handleTextMessage = async (bot: TelegramBot, msg: TelegramBot.Message, userLangsMap: Map<number, { code: string, name: string, flag: string }>) => {
     const chatId = msg.chat.id;
     const text = msg.text;
+
     
 
     if (text && !text.startsWith('/')) {
@@ -45,7 +48,7 @@ export const handleTextMessage = async (bot: TelegramBot, msg: TelegramBot.Messa
             try {
                 bot.sendChatAction(chatId, 'typing');
                 const translatedText = await translateText(text, targetLanguage.code);
-                const sentMessage = await bot.sendMessage(chatId, `${translatedText}`, {
+                await bot.sendMessage(chatId, `${translatedText}`, {
                     reply_markup: {
                         keyboard: [
                             [{ text: user.language.code === 'uz' ? 'Bot turini o\'zgartirish' : user.language.code === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
@@ -56,7 +59,7 @@ export const handleTextMessage = async (bot: TelegramBot, msg: TelegramBot.Messa
                     reply_to_message_id: msg.message_id
                 });
             } catch (error) {
-                const sentMessage = await bot.sendMessage(chatId, error.message, {
+                await bot.sendMessage(chatId, error.message, {
                     reply_markup: {
                         keyboard: [
                             [{ text: user.language.code === 'uz' ? 'Bot turini o\'zgartirish' : user.language.code === 'ru' ? 'Изменить режим работы бота' : 'Change bot type' }]
@@ -67,7 +70,7 @@ export const handleTextMessage = async (bot: TelegramBot, msg: TelegramBot.Messa
                 });
             }
         } else {
-            const sentMessage = await bot.sendMessage(chatId, 'Iltimos, avval tarjima tilini tanlang.', createLanguageOptions());
+            await bot.sendMessage(chatId, 'Iltimos, avval tarjima tilini tanlang.', createLanguageOptions());
         }
     }
 };
