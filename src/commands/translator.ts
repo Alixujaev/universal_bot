@@ -24,7 +24,7 @@ export const handleTranslationCommand = async (bot: TelegramBot, callbackQuery: 
     if (language) {
         userLangsMap.set(chatId, language);
         
-        await bot.editMessageText(translateMessage(chatId, `Translation language is set to {flag} {name}. Now you can change the language by typing:\n\n/setlanguage`, {
+        await bot.editMessageText(translateMessage(chatId, 'Translation language is set to {flag} {name}. Now you can change the language by typing:\n\n/setlanguage', {
             flag: language.flag,
             name: language.name
         }), {

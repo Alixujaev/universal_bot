@@ -11,16 +11,21 @@ import {
 import { 
     handleDownloadCommand, handleMediaUrl 
 } from './commands/downloader';
-import {  languageOptions, selectLanguage, translateMessage 
+import { 
+    languageOptions, selectLanguage, translateMessage 
 } from './utils/systemLangs';
-import {  mainMenuOptions, sendMessage 
+import { 
+    clearPreviousMessages,
+    mainMenuOptions, sendMessage 
 } from './utils/mainMenu';
 import { User } from './utils/user';
 import { UserType } from './types';
 import { bot } from './botInstance';
 import { broadcastMessage, handleAdminCommand, handleStatsCommand } from './admin';
 import { connectDatabase } from './database';
-import { handleTextToVoice, handleTextToVoiceCommand, handleVoiceToText } from './commands/voice';
+import { handleTextToVoice, handleTextToVoiceCommand } from './commands/voice';
+
+// de
 
 dotenv.config();
 connectDatabase();
@@ -41,30 +46,31 @@ const Commands = {
     CURRENCY: ['Currency Calculator', 'Valyuta Kalkulyatori', 'Калькулятор валют'],
     CONVERT: ['File Conversion', 'Fayl Konvertatsiyasi', 'Конвертация файлов'],
     VOICE: ['Text to voice', 'Matnni ovozga aylantirish', 'Текст в голос'],
-    ADMIN: ['/admin'] // Admin buyruqni qo'shish
+    ADMIN: ['/admin']
 };
 
 function isValidCommand(command: string, context: string, lang: string) {
-    return (
-        (command === 'Change bot type' && lang === 'en') ||
-        (command === 'Bot turini o\'zgartirish' && lang === 'uz') ||
-        (command === 'Изменить режим работы бота' && lang === 'ru') ||
-        (command === 'Translation' && lang === 'en') ||
-        (command === 'Tarjima' && lang === 'uz') ||
-        (command === 'Перевод' && lang === 'ru') ||
-        (command === 'Download' && lang === 'en') ||
-        (command === 'Yuklash' && lang === 'uz') ||
-        (command === 'Скачать' && lang === 'ru') ||
-        (command === 'Currency Calculator' && lang === 'en') ||
-        (command === 'Valyuta Kalkulyatori' && lang === 'uz') ||
-        (command === 'Калькулятор валют' && lang === 'ru') ||
-        (command === 'File Conversion' && lang === 'en') ||
-        (command === 'Fayl Konvertatsiyasi' && lang === 'uz') ||
-        (command === 'Конвертация файлов' && lang === 'ru') || 
-        (command === 'Text to voice' && lang === 'en') ||
-        (command === 'Matnni ovozga aylantirish' && lang === 'uz') ||
-        (command === 'Текст в голос' && lang === 'ru')
-    );
+    const commandList = {
+        'Change bot type': 'en',
+        'Bot turini o\'zgartirish': 'uz',
+        'Изменить режим работы бота': 'ru',
+        'Translation': 'en',
+        'Tarjima': 'uz',
+        'Перевод': 'ru',
+        'Download': 'en',
+        'Yuklash': 'uz',
+        'Скачать': 'ru',
+        'Currency Calculator': 'en',
+        'Valyuta Kalkulyatori': 'uz',
+        'Калькулятор валют': 'ru',
+        'File Conversion': 'en',
+        'Fayl Konvertatsiyasi': 'uz',
+        'Конвертация файлов': 'ru',
+        'Text to voice': 'en',
+        'Matnni ovozga aylantirish': 'uz',
+        'Текст в голос': 'ru'
+    };
+    return commandList[command] === lang;
 }
 
 bot.on('polling_error', (error) => {
@@ -76,22 +82,23 @@ bot.on('webhook_error', (error) => {
 });
 
 bot.onText(/\/start/, async (msg) => {
-    if(msg.from.is_bot) return;
-    const existUser = await User.findOne({ chatId: msg.chat.id });
+    if (msg.from.is_bot) return;
     const chatId = msg.chat.id;
     userContextMap.set(chatId, 'main');
     await selectLanguage(chatId, bot);
-    if(!existUser){
+
+    const existUser = await User.findOne({ chatId });
+    if (!existUser) {
         await User.create({ 
             chatId, 
-            name: msg.chat.first_name ? msg.chat.first_name : "Default", 
+            name: msg.chat.first_name || "Default", 
             context: "", 
             language: {}, 
             translate_lang: {}, 
             currency_from: {}, 
             currency_to: {}, 
-            is_premium: false
-         });
+            is_premium: false 
+        });
     }
 });
 
@@ -110,7 +117,7 @@ function handleGeneralCommands(commandsArray: string[], context: string, callbac
                 userContextMap.set(chatId, context);
                 await callback(chatId);
             } else {
-                await bot.sendMessage(chatId, 'Invalid command. Please select a valid option.', mainMenuOptions());
+                await bot.sendMessage(chatId, 'Invalid command. Please select a valid option. INVALID 1', mainMenuOptions());
             }
         });
     });
@@ -147,7 +154,6 @@ handleGeneralCommands(Commands.VOICE, 'voice', async (chatId: number) => {
 
 bot.onText(/\/change_currency/, async (msg) => {
     const chatId = msg.chat.id;
-    console.log(`/change_currency command received from chat ID ${chatId}`);
     
     if (userContextMap.get(chatId) === 'currency') {
         await handleChangeCurrency(bot, msg);
@@ -158,7 +164,6 @@ bot.onText(/\/change_currency/, async (msg) => {
 
 bot.onText(/\/setlanguage/, async (msg) => {
     const chatId = msg.chat.id;
-    console.log(`/setlanguage command received from chat ID ${chatId}`);
     if (userContextMap.get(chatId) === 'translate') {
         await setTranslationLanguage(bot, chatId);
     } else {
@@ -166,7 +171,23 @@ bot.onText(/\/setlanguage/, async (msg) => {
     }
 });
 
+bot.onText(/\/vip/, async (msg) => {
+    const chatId = msg.chat.id;
+    await bot.sendMessage(chatId, 'VIP status \n\n2500 ta harf \nOvoz tillari: English 🇺🇸, Russian 🇷🇺, Uzbek 🇺🇿 \n\n1 oylik xizmat narxi: 10000 so`m', {
+        reply_markup: {
+            inline_keyboard: [
+                [
+                    { text: 'Visa, Mastercard bilan tolov 🌍', callback_data: 'global_pay' },
+                    { text: "O'zbekiston bo'yicha tolov 🇺🇿", callback_data: 'uz_pay' },
+                ],
+            ],
+        },
+    });
+});
+
 bot.onText(/\/admin/, handleAdminCommand);
+
+
 
 bot.on('callback_query', async (callbackQuery) => {
     const message = callbackQuery.message;
@@ -174,12 +195,12 @@ bot.on('callback_query', async (callbackQuery) => {
     const chatId = message?.chat.id;
 
     if (message && data) {
-        
         if (data.startsWith('start_lang_')) {
             const selectedLang = languageOptions.find(lang => `start_lang_${lang.code}` === data);
             if (selectedLang) {
                 user = await User.findOneAndUpdate({ chatId }, { language: selectedLang }, { new: true });     
                 await sendMessage(chatId, bot, 'Welcome to the universal bot! Please choose from the menu below:', mainMenuOptions());
+                clearPreviousMessages(chatId, bot);
             }
         } else if (data.startsWith('from_')) {
             if (data.includes('page_')) {
@@ -193,11 +214,9 @@ bot.on('callback_query', async (callbackQuery) => {
             if (data.includes('page_')) {
                 const page = parseInt(data.split('page_')[1], 10);
                 userContextMap.set(chatId, 'currency');
-
                 await handleCurrencyPagination(bot, callbackQuery, 'to', page);
             } else {
                 userContextMap.set(chatId, 'currency');
-
                 await handleCurrencySelection(bot, callbackQuery, data, 'to');
             }
         } else if (data === 'translate') {
@@ -210,63 +229,71 @@ bot.on('callback_query', async (callbackQuery) => {
             await handleTranslationCommand(bot, callbackQuery, data, userLangsMap);
         } else if (data.startsWith('convert_')) {
             await handleFileConversion(bot, callbackQuery);
-        }else if (data === 'voice'){
+        } else if (data === 'voice') {
             await handleTextToVoiceCommand(bot, chatId);
         }
+
+
+        if(data === 'uz_pay') {
+            await bot.sendMessage(chatId, "O'zbekiston ichida Click yoki Payme ilovalari orqali tolov qilish imkoniyati mavjud.\n\n1 oylik xizmat narxi: 10000 so'm\nShulardan birini tanlang 👇🏻", {
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: 'Click', callback_data: 'click' },
+                            { text: "Payme", callback_data: 'payme' },
+                        ],
+                    ],
+                },
+            });
+        }
+        
     }
 });
-
 
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const context = userContextMap.get(chatId);
-    
+
     await broadcastMessage(msg);
 
-    if (msg  && !Commands.CHANGE_TYPE.concat(Commands.TRANSLATION, Commands.DOWNLOAD, Commands.CURRENCY, Commands.CONVERT).map(cmd => translateMessage(chatId, cmd)).includes(msg.text)) {
-        if(context === 'main'){
-            bot.sendMessage(chatId, 'Invalid command. Please select a valid option.', mainMenuOptions());
-        }else if (context === 'translate') {
-            if(msg.document || msg.video || msg.photo || msg.video_note || msg.audio || msg.audio_note) {
+    if (msg && !Commands.CHANGE_TYPE.concat(Commands.TRANSLATION, Commands.DOWNLOAD, Commands.CURRENCY, Commands.CONVERT).map(cmd => translateMessage(chatId, cmd)).includes(msg.text)) {
+         if (context === 'translate') {
+            if (msg.document || msg.video || msg.photo || msg.video_note || msg.audio || msg.audio_note) {
                 await bot.sendMessage(chatId, 'Bu statusda file yuklash mumkin emas.');
             }
             handleTextMessage(bot, msg, userLangsMap);
         } else if (context === 'save') {
-            if(msg.document || msg.video || msg.photo || msg.video_note || msg.audio || msg.audio_note) {
+            if (msg.document || msg.video || msg.photo || msg.video_note || msg.audio || msg.audio_note) {
                 await bot.sendMessage(chatId, 'Bu statusda file yuklash mumkin emas.');
             }
             handleMediaUrl(bot, msg);
         } else if (context === 'currency') {
             handleCurrencyConversion(bot, msg);
         } else if (context === 'convert') {
+            console.log('CONTEXT', context);
+            
             if (msg.document) {
                 await handleDocumentMessage(bot, msg);
             } else if (msg.video) {
                 await handleVideoMessage(bot, msg);
             }
         } else if (context === 'voice') {
-            if(msg.voice || msg.audio){
-                console.log('VOICEEE INDEX');
-                
-                handleVoiceToText(bot, msg);
-            }else{
-                handleTextToVoice(bot, msg);
-            }
+            handleTextToVoice(bot, msg);
         }
     }
 
-    if (msg.document && Commands.CONVERT.includes(msg.text)) {
+    if (msg.document) {
+        console.log('CONTEXT', context);
         await handleDocumentMessage(bot, msg);
-    } else if (msg.photo && Commands.CONVERT.includes(msg.text)) {
+    } else if (msg.photo) {
         const fileId = msg.photo[msg.photo.length - 1].file_id;
         const fileName = `photo_${fileId}.jpg`;
         const mimeType = 'image/jpeg';
 
         await handleDocumentMessage(bot, { ...msg, document: { file_id: fileId, file_name: fileName, mime_type: mimeType } });
-    } else if (msg.video || msg.video_note && Commands.CONVERT.includes(msg.text)) {
-        await handleVideoMessage(bot, msg && Commands.CONVERT.includes(msg.text));
+    } else if (msg.video || msg.video_note) {
+        await handleVideoMessage(bot, msg);
     } else if (msg.audio || msg.audio_note) {
         await handleAudioMessage(bot, msg);
     }
 });
-

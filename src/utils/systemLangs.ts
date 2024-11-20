@@ -28,7 +28,8 @@ export function translateToUzbek (text: string, variables: { [key: string]: stri
       'An error occurred while retrieving exchange rates. Please try again later.': 'Valyuta kalkulyatsiyasi olishida xatolik yuz berdi. Iltimos, qayta urunib ko‘ring.',
       'Please select currencies first.': 'Iltimos, valyutalarni tanlang.',
       'You have selected the currency {curr} {flag}. Which currency do you want to calculate now?': 'Siz {curr} {flag} valyutasini tanladingiz. Endi qaysi valyutaga kalkulyatsiya qilishni xohlaysiz?',
-      'You have chosen to calculate from {curr_1} {flag_1} currency to {curr_2} {flag_2} currency. Please enter an amount:\n\n/change_currency - change currency': `Siz {curr_1} {flag_1} valyutasidan {curr_2} {flag_2} valyutasiga kalkulyatsiya qilishni tanladingiz. Iltimos, miqdorni kiriting:\n\n/change_currency - valyutani o'zgartirish`
+      'You have chosen to calculate from {curr_1} {flag_1} currency to {curr_2} {flag_2} currency. Please enter an amount:\n\n/change_currency - change currency': `Siz {curr_1} {flag_1} valyutasidan {curr_2} {flag_2} valyutasiga kalkulyatsiya qilishni tanladingiz. Iltimos, miqdorni kiriting:\n\n/change_currency - valyutani o'zgartirish`,
+      'Text to voice': 'Matnni ovozga aylantirish',
       // Add more translations here
   };
 
@@ -68,7 +69,8 @@ export function translateToRussian (text: string, variables: { [key: string]: st
       'An error occurred while retrieving exchange rates. Please try again later.': 'Произошла ошибка при получении курсов. Пожалуйста, попробуйте ещё раз позже.',
       'Please select currencies first.': 'Пожалуйста, выберите валюты.',
       'You have selected the currency {curr} {flag}. Which currency do you want to calculate now?': 'Вы выбрали валюту {curr} {flag}. В какой валюте вы хотите рассчитать сейчас?',
-      'You have chosen to calculate from {curr_1} {flag_1} currency to {curr_2} {flag_2} currency. Please enter an amount:\n\n/change_currency - change currency': 'Вы выбрали расчет из валюты {curr_1} {flag_1} в валюту {curr_2} {flag_2}. Введите сумму:\n\n/change_currency - изменить валюту'
+      'You have chosen to calculate from {curr_1} {flag_1} currency to {curr_2} {flag_2} currency. Please enter an amount:\n\n/change_currency - change currency': 'Вы выбрали расчет из валюты {curr_1} {flag_1} в валюту {curr_2} {flag_2}. Введите сумму:\n\n/change_currency - изменить валюту',
+      'Text to voice': 'Текст в голос',
       // Add more translations here
   };
   let translatedText = translations[text] || text;
@@ -104,6 +106,7 @@ export function translateToEnglish (text: string, variables: { [key: string]: st
     'Please select currencies first.': 'Please select currencies first.',
     'You have selected the currency {curr} {flag}. Which currency do you want to calculate now?': 'You have selected the currency {curr} {flag}. Which currency do you want to calculate now?',
     'You have chosen to calculate from {curr_1}! {flag_1}! currency to {curr_2}! {flag_2}! currency. Please enter an amount:\n\n/change_currency - change currency': 'You have chosen to calculate from !{curr_1} {flag_1}! currency to {curr_2}! {flag_2}! currency. Please enter an amount:\n\n/change_currency - change currency',
+    'Text to voice': 'Text to voice',
       // Add more translations here
   };
   let translatedText = translations[text] || text;
